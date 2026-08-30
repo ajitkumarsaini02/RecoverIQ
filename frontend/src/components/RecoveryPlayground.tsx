@@ -196,7 +196,7 @@ export const RecoveryPlayground: React.FC = () => {
               className="px-5 sm:px-6 py-2.5 sm:py-3 rounded-xl bg-gradient-to-r from-brand-600 to-emerald-500 hover:from-brand-500 hover:to-emerald-400 text-white font-bold text-xs sm:text-sm shadow-xl shadow-brand-500/25 flex items-center justify-center gap-2 transition-all transform active:scale-95 disabled:opacity-50 shrink-0 cursor-pointer w-full sm:w-auto"
             >
               <Play className={`h-4 w-4 fill-white ${running ? 'animate-spin' : ''}`} />
-              <span>{running ? 'Executing Recovery Pipeline...' : 'Run Scenario'}</span>
+              <span>{running ? 'Executing Recovery Pipeline...' : `Run Scenario: ${selectedScenario.badge} (₹${selectedScenario.amount.toLocaleString('en-IN')})`}</span>
             </button>
           </div>
         </div>
@@ -211,9 +211,16 @@ export const RecoveryPlayground: React.FC = () => {
 
       {/* Scenario Selector Grid */}
       <div>
-        <h3 className="text-[11px] sm:text-xs font-mono uppercase tracking-wider text-slate-400 mb-2.5 sm:mb-3">
-          RECOVERY SCENARIOS
-        </h3>
+        <div className="flex items-center justify-between mb-2.5 sm:mb-3">
+          <h3 className="text-[11px] sm:text-xs font-mono uppercase tracking-wider text-slate-400">
+            CHOOSE RECOVERY SCENARIO (CLICK TO SELECT)
+          </h3>
+          <span className="text-[11px] font-mono text-emerald-400 font-semibold flex items-center gap-1">
+            <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
+            Selected: {selectedScenario.badge}
+          </span>
+        </div>
+
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 sm:gap-3">
           {PRESET_SCENARIOS.map((s) => {
             const isSelected = selectedScenarioId === s.id;
@@ -227,19 +234,28 @@ export const RecoveryPlayground: React.FC = () => {
                 }}
                 className={`p-4 rounded-xl glass-card border transition-all cursor-pointer relative overflow-hidden ${
                   isSelected
-                    ? 'border-brand-500/60 bg-surface-highlight/70 shadow-lg shadow-brand-500/10'
+                    ? 'border-brand-400/80 bg-brand-950/40 ring-2 ring-brand-500/50 shadow-lg shadow-brand-500/20'
                     : 'border-surface-border hover:border-slate-600 hover:bg-surface-card'
                 }`}
               >
                 <div className="flex items-center justify-between gap-2 mb-2">
-                  <span className={`text-[10px] font-mono font-semibold px-2 py-0.5 rounded-full border ${s.badgeColor}`}>
-                    {s.badge}
-                  </span>
+                  <div className="flex items-center gap-1.5">
+                    <span className={`text-[10px] font-mono font-semibold px-2 py-0.5 rounded-full border ${s.badgeColor}`}>
+                      {s.badge}
+                    </span>
+                    {isSelected && (
+                      <span className="text-[9px] font-mono font-bold px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 flex items-center gap-1">
+                        ✓ SELECTED
+                      </span>
+                    )}
+                  </div>
                   <span className="text-sm font-bold text-white">
                     ₹{s.amount.toLocaleString('en-IN')}
                   </span>
                 </div>
-                <h4 className="font-semibold text-sm text-slate-100">{s.title}</h4>
+                <h4 className={`font-semibold text-sm transition-colors ${isSelected ? 'text-brand-300' : 'text-slate-100'}`}>
+                  {s.title}
+                </h4>
                 <p className="text-xs text-slate-400 mt-1 line-clamp-2">{s.subtitle}</p>
                 <div className="mt-3 pt-3 border-t border-surface-border/50 flex items-center justify-between text-[11px] font-mono text-slate-300">
                   <span>Method: {s.method}</span>
@@ -251,12 +267,50 @@ export const RecoveryPlayground: React.FC = () => {
         </div>
       </div>
 
+      {/* Currently Selected Scenario Detail Banner */}
+      <div className="p-4 rounded-2xl bg-gradient-to-r from-brand-950/40 via-surface-card to-blue-950/30 border border-brand-500/40 flex flex-col sm:flex-row sm:items-center justify-between gap-3 shadow-lg shadow-brand-500/10">
+        <div className="flex items-start sm:items-center gap-3">
+          <div className="h-10 w-10 rounded-xl bg-brand-500/20 border border-brand-500/30 flex items-center justify-center text-brand-400 shrink-0 mt-0.5 sm:mt-0">
+            <CheckCircle2 className="h-5 w-5" />
+          </div>
+          <div>
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-[10px] font-mono font-bold uppercase tracking-wider text-slate-400">
+                ACTIVE SELECTION:
+              </span>
+              <span className="text-xs font-mono font-bold text-brand-300 bg-brand-500/10 px-2 py-0.5 rounded border border-brand-500/30">
+                {selectedScenario.badge}
+              </span>
+              <span className="text-xs font-bold text-white">
+                ₹{selectedScenario.amount.toLocaleString('en-IN')} ({selectedScenario.method})
+              </span>
+              <span className="text-[10px] font-mono text-rose-300 bg-rose-500/10 px-2 py-0.5 rounded border border-rose-500/30">
+                {selectedScenario.reason}
+              </span>
+            </div>
+            <p className="text-xs text-slate-300 mt-1">
+              <strong className="text-white">{selectedScenario.title}:</strong> {selectedScenario.subtitle}
+            </p>
+          </div>
+        </div>
+
+        <button
+          type="button"
+          onClick={handleRunScenario}
+          disabled={running}
+          className="px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-500 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-md shadow-brand-500/30 transition-all shrink-0 cursor-pointer w-full sm:w-auto"
+        >
+          <Play className={`h-3.5 w-3.5 fill-white ${running ? 'animate-spin' : ''}`} />
+          <span>{running ? 'Running...' : 'Execute Now'}</span>
+        </button>
+      </div>
+
       {/* Live 7-Step Pipeline Stepper */}
-      <div className="p-6 rounded-2xl glass-panel border border-surface-border space-y-6">
+      <div className="p-4 sm:p-6 rounded-2xl glass-panel border border-surface-border space-y-4 sm:space-y-6">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Activity className="h-5 w-5 text-brand-400" />
-            <h3 className="text-base font-bold text-white">7-Step Visual Recovery Pipeline</h3>
+            <h3 className="text-sm sm:text-base font-bold text-white">7-Step Visual Recovery Pipeline</h3>
           </div>
           <div className="flex items-center gap-2 text-xs font-mono">
             <span className="text-slate-400">Mode:</span>
