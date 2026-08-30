@@ -68,3 +68,23 @@ def test_api_transaction_not_found():
     client = TestClient(app)
     response = client.get("/api/transactions/txn_non_existent_99999")
     assert response.status_code == 404
+
+def test_api_list_and_get_customers():
+    client = TestClient(app)
+    # 1. List customers
+    res = client.get("/api/customers?limit=5")
+    assert res.status_code == 200
+    custs = res.json()
+    assert len(custs) == 5
+    cust_id = custs[0]["id"]
+    
+    # 2. Get customer detail
+    res_detail = client.get(f"/api/customers/{cust_id}")
+    assert res_detail.status_code == 200
+    assert res_detail.json()["id"] == cust_id
+    assert "email" in res_detail.json()
+    
+    # 3. Customer 404
+    res_404 = client.get("/api/customers/cust_non_existent_99999")
+    assert res_404.status_code == 404
+

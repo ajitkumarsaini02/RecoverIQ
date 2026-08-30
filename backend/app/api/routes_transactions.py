@@ -1,10 +1,10 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import or_, desc
-from typing import Optional
+from typing import Optional, List
 from app.db.session import get_db
 from app.db.models import Transaction, Customer, RecoveryAction, AuditEvent
-from app.schemas.transaction import TransactionSchema, TransactionListResponse
+from app.schemas.transaction import TransactionSchema, TransactionListResponse, CustomerSchema
 from app.services.seed_service import seed_database
 
 router = APIRouter(prefix="/api", tags=["Transactions & Seed"])
@@ -85,3 +85,33 @@ def get_transaction(transaction_id: str, db: Session = Depends(get_db)):
     data["audit_events"] = [aud.to_dict() for aud in txn.audit_events]
 
     return TransactionSchema(**data)
+
+@router.get("/customers", response_model=List[CustomerSchema])
+def list_customers(
+    limit: int = Query(50, ge=1, le=500),
+    offset: int = Query(0, ge=0),
+    search: Optional[str] = Query(None),
+    db: Session = Depends(get_db)
+):
+    """Retrieve customers with pagination and optional search."""
+    query = db.query(Customer)
+    if search:
+        search_pattern = f"%{search.strip()}%"
+        query = query.filter(
+            or_(
+                Customer.name.ilike(search_pattern),
+                Customer.email.ilike(search_pattern),
+                Customer.id.ilike(search_pattern)
+            )
+        )
+    customers = query.order_by(desc(Customer.created_at)).offset(offset).limit(limit).all()
+    return [CustomerSchema(**c.to_dict()) for c in customers]
+
+@router.get("/customers/{customer_id}", response_model=CustomerSchema)
+def get_customer(customer_id: str, db: Session = Depends(get_db)):
+    """Fetch single customer by ID."""
+    cust = db.query(Customer).filter(Customer.id == customer_id).first()
+    if not cust:
+        raise HTTPException(status_code=404, detail=f"Customer with ID '{customer_id}' not found.")
+    return CustomerSchema(**cust.to_dict())
+
