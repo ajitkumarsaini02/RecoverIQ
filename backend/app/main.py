@@ -28,12 +28,10 @@ app = FastAPI(
     lifespan=lifespan
 )
 
-# Configure CORS
+# Configure CORS - Enable cross-origin API access for Vercel, Render and local development
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.cors_origins_list,
-    allow_origin_regex=r"https://.*\.vercel\.app",
-    allow_credentials=True,
+    allow_origins=["*"],
     allow_methods=["*"],
     allow_headers=["*"],
 )
