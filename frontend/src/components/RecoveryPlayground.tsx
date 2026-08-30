@@ -196,7 +196,7 @@ export const RecoveryPlayground: React.FC = () => {
               className="px-5 sm:px-6 py-2.5 sm:py-3 rounded-xl bg-gradient-to-r from-brand-600 to-emerald-500 hover:from-brand-500 hover:to-emerald-400 text-white font-bold text-xs sm:text-sm shadow-xl shadow-brand-500/25 flex items-center justify-center gap-2 transition-all transform active:scale-95 disabled:opacity-50 shrink-0 cursor-pointer w-full sm:w-auto"
             >
               <Play className={`h-4 w-4 fill-white ${running ? 'animate-spin' : ''}`} />
-              <span>{running ? 'Executing Recovery Pipeline...' : `Run Scenario: ${selectedScenario.badge} (₹${selectedScenario.amount.toLocaleString('en-IN')})`}</span>
+              <span>{running ? 'Executing Recovery Pipeline...' : `Run Scenario: ${selectedScenario.badge}`}</span>
             </button>
           </div>
         </div>
