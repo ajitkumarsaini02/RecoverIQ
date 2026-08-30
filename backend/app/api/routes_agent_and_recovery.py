@@ -55,7 +55,11 @@ def analyze_transaction_by_id(transaction_id: str, db: Session = Depends(get_db)
     }
 
 @router.post("/recovery/execute/{transaction_id}", response_model=RecoveryExecutionResponse)
-async def execute_recovery_for_transaction(transaction_id: str, db: Session = Depends(get_db)):
+async def execute_recovery_for_transaction(
+    transaction_id: str, 
+    mode: Optional[str] = Query(None),
+    db: Session = Depends(get_db)
+):
     """
     Executes the 5-step recovery workflow:
     Failed Payment -> AI Analysis -> Policy Validation -> Recovery Action -> Result
@@ -64,7 +68,7 @@ async def execute_recovery_for_transaction(transaction_id: str, db: Session = De
     if not txn:
         raise HTTPException(status_code=404, detail=f"Transaction with ID '{transaction_id}' not found.")
 
-    result = await recovery_executor.execute_recovery(db=db, transaction=txn)
+    result = await recovery_executor.execute_recovery(db=db, transaction=txn, mode=mode)
     return result
 
 @router.get("/approvals")
@@ -93,15 +97,16 @@ def list_pending_approvals(db: Session = Depends(get_db)):
                 "reasons": json.loads(act.policy_reasons_json) if act.policy_reasons_json else []
             },
             "policy_reasons": json.loads(act.policy_reasons_json) if act.policy_reasons_json else [],
+            "mode": act.mode,
             "created_at": act.created_at.isoformat() if act.created_at else None
         })
 
     return results
 
 @router.post("/recovery/approve/{action_id}")
-def approve_action(action_id: str, db: Session = Depends(get_db)):
-    """Approve a gated recovery action and execute it safely."""
-    act = db.query(RecoveryAction).options(joinedload(RecoveryAction.transaction)).filter(RecoveryAction.id == action_id).first()
+async def approve_action(action_id: str, db: Session = Depends(get_db)):
+    """Approve a gated recovery action and attempt authorized recovery execution."""
+    act = db.query(RecoveryAction).options(joinedload(RecoveryAction.transaction).joinedload(Transaction.customer)).filter(RecoveryAction.id == action_id).first()
     if not act:
         raise HTTPException(status_code=404, detail="Recovery action not found")
 
@@ -109,18 +114,11 @@ def approve_action(action_id: str, db: Session = Depends(get_db)):
         return {"status": act.status, "message": f"Action is already in '{act.status}' status."}
 
     now = datetime.now(timezone.utc)
-    act.status = "SUCCESS"
     act.approved_by = "Merchant Operator"
     act.approved_at = now
     act.executed_at = now
-    act.recovered_amount = act.transaction.amount
 
-    if act.transaction:
-        act.transaction.status = "RECOVERED"
-        act.transaction.retry_count += 1
-        act.transaction.updated_at = now
-
-    # Log APPROVED Audit Event
+    # Log APPROVED Audit Event (Human authorization)
     aud_app = AuditEvent(
         id=f"aud_{uuid.uuid4().hex[:12]}",
         timestamp=now,
@@ -132,24 +130,65 @@ def approve_action(action_id: str, db: Session = Depends(get_db)):
     )
     db.add(aud_app)
 
-    aud_rec = AuditEvent(
-        id=f"aud_{uuid.uuid4().hex[:12]}",
-        timestamp=now + timedelta(milliseconds=100),
-        transaction_id=act.transaction_id,
-        event_type="PAYMENT_RECOVERED",
-        actor="RAZORPAY_GATEWAY",
-        decision="REVENUE_RECOVERED",
-        details_json=json.dumps({"recovered_amount": act.recovered_amount, "mode": act.mode})
-    )
-    db.add(aud_rec)
-    db.commit()
+    # Perform authorized recovery execution
+    txn = act.transaction
+    if act.mode == "SIMULATION_MODE":
+        act.status = "SUCCESS"
+        act.recovered_amount = txn.amount if txn else 0.0
+        if txn:
+            txn.status = "RECOVERED"
+            txn.retry_count += 1
+            txn.updated_at = now
 
-    return {
-        "status": "APPROVED_AND_EXECUTED",
-        "action_id": act.id,
-        "recovered_amount": act.recovered_amount,
-        "message": f"Approved and recovered ₹{act.recovered_amount:,.0f}"
-    }
+        aud_rec = AuditEvent(
+            id=f"aud_{uuid.uuid4().hex[:12]}",
+            timestamp=now + timedelta(milliseconds=100),
+            transaction_id=act.transaction_id,
+            event_type="PAYMENT_RECOVERED",
+            actor="RAZORPAY_GATEWAY",
+            decision="REVENUE_RECOVERED",
+            details_json=json.dumps({"recovered_amount": act.recovered_amount, "mode": "SIMULATION_MODE"})
+        )
+        db.add(aud_rec)
+        db.commit()
+
+        return {
+            "status": "APPROVED_AND_EXECUTED",
+            "action_id": act.id,
+            "recovered_amount": act.recovered_amount,
+            "message": f"Approved and simulated recovery of ₹{act.recovered_amount:,.0f}"
+        }
+    else:
+        # Real Test Mode: generate payment link or create order
+        if txn:
+            txn.retry_count += 1
+            txn.status = "RECOVERY_PENDING"
+            txn.updated_at = now
+
+        from app.services.razorpay_service import razorpay_service
+        plink = await razorpay_service.create_payment_link(
+            amount_in_inr=txn.amount if txn else 1000.0,
+            customer_name=txn.customer.name if (txn and txn.customer) else "Enterprise Customer",
+            customer_email=txn.customer.email if (txn and txn.customer) else "customer@domain.in",
+            customer_phone=txn.customer.phone if (txn and txn.customer) else "+919876543210",
+            description=f"Approved Enterprise Recovery - Txn {txn.id if txn else 'N/A'}",
+            force_mode="TEST_MODE"
+        )
+        act.status = "APPROVED"
+        act.recovered_amount = 0.0
+        act.execution_details_json = json.dumps(plink)
+        if txn:
+            txn.razorpay_payment_link = plink.get("short_url")
+
+        db.commit()
+
+        return {
+            "status": "APPROVED_AND_DISPATCHED",
+            "action_id": act.id,
+            "payment_link": plink.get("short_url"),
+            "recovered_amount": 0.0,
+            "message": f"Approved! Razorpay Test Payment Link generated ({plink.get('short_url')}). Awaiting customer payment."
+        }
 
 @router.post("/recovery/reject/{action_id}")
 def reject_action(action_id: str, req: Optional[RejectRequest] = None, db: Session = Depends(get_db)):

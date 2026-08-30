@@ -1,8 +1,10 @@
 import base64
 import uuid
 import json
+import hmac
+import hashlib
 import logging
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 from datetime import datetime, timezone
 import httpx
 from app.config import settings
@@ -11,14 +13,16 @@ logger = logging.getLogger("recoveriq.razorpay")
 
 class RazorpayService:
     """
-    Razorpay Test Mode abstraction with automatic fallback to DEMO / SIMULATION MODE.
-    Ensures safe, bounded execution without exposing secrets to frontend or crashing if keys are unset.
+    Razorpay Test Mode abstraction with independent payment verification
+    and separate explicit SIMULATION MODE.
+    Ensures safe, bounded execution without exposing secrets to frontend.
     """
     BASE_URL = "https://api.razorpay.com/v1"
 
-    def __init__(self, key_id: Optional[str] = None, key_secret: Optional[str] = None):
+    def __init__(self, key_id: Optional[str] = None, key_secret: Optional[str] = None, webhook_secret: Optional[str] = None):
         self.key_id = key_id or settings.RAZORPAY_KEY_ID
         self.key_secret = key_secret or settings.RAZORPAY_KEY_SECRET
+        self.webhook_secret = webhook_secret or settings.RAZORPAY_WEBHOOK_SECRET
 
     @property
     def is_configured(self) -> bool:
@@ -26,7 +30,7 @@ class RazorpayService:
 
     @property
     def is_live_test_mode(self) -> bool:
-        """Returns True only if actual test credentials are provided."""
+        """Returns True only if actual Razorpay test credentials are provided."""
         return bool(
             self.is_configured
             and not self.key_id.startswith("rzp_test_placeholder")
@@ -48,19 +52,21 @@ class RazorpayService:
         self, 
         amount_in_inr: float, 
         receipt: Optional[str] = None, 
-        notes: Optional[Dict[str, Any]] = None
+        notes: Optional[Dict[str, Any]] = None,
+        force_mode: Optional[str] = None
     ) -> Dict[str, Any]:
         """
         Creates a Razorpay Order in paise (1 INR = 100 paise).
-        Calls real Razorpay Test API if credentials exist, otherwise returns simulated order.
+        Calls real Razorpay Test API if in TEST_MODE and configured, otherwise returns simulated order.
         """
         amount_paise = int(round(amount_in_inr * 100))
         receipt_id = receipt or f"rcpt_{uuid.uuid4().hex[:10]}"
         notes_payload = notes or {"source": "RecoverIQ Revenue Recovery"}
+        requested_mode = force_mode or self.current_mode_label
 
-        if self.is_live_test_mode:
+        if requested_mode == "TEST_MODE" and self.is_live_test_mode:
             try:
-                async with httpx.AsyncClient(timeout=10.0) as client:
+                async with httpx.AsyncClient(timeout=12.0) as client:
                     response = await client.post(
                         f"{self.BASE_URL}/orders",
                         headers=self._get_auth_header(),
@@ -74,15 +80,27 @@ class RazorpayService:
                     if response.status_code in [200, 201]:
                         data = response.json()
                         data["mode"] = "TEST_MODE"
+                        logger.info(f"Razorpay Test Order created: {data.get('id')}")
                         return data
                     else:
-                        logger.warning(f"Razorpay API returned {response.status_code}, falling back to simulation: {response.text}")
+                        logger.error(f"Razorpay Order API returned HTTP {response.status_code}: {response.text[:200]}")
+                        return {
+                            "error": f"Razorpay API error ({response.status_code})",
+                            "details": response.text[:200],
+                            "mode": "TEST_MODE",
+                            "status": "failed"
+                        }
             except Exception as e:
-                logger.error(f"Razorpay Test Mode network error: {e}, falling back to simulation.")
+                logger.error(f"Razorpay Test Mode network error: {e}")
+                return {
+                    "error": str(e),
+                    "mode": "TEST_MODE",
+                    "status": "failed"
+                }
 
         # Simulation Mode fallback
         return {
-            "id": f"order_test_{uuid.uuid4().hex[:14]}",
+            "id": f"order_sim_{uuid.uuid4().hex[:14]}",
             "entity": "order",
             "amount": amount_paise,
             "amount_paid": 0,
@@ -102,17 +120,19 @@ class RazorpayService:
         customer_name: str,
         customer_email: str,
         customer_phone: Optional[str] = None,
-        description: str = "Payment Recovery Link - RecoverIQ"
+        description: str = "Payment Recovery Link - RecoverIQ",
+        force_mode: Optional[str] = None
     ) -> Dict[str, Any]:
         """
-        Generates a Razorpay Payment Link for customer recovery.
+        Generates a real Razorpay Payment Link in Test Mode or returns simulated link.
         """
         amount_paise = int(round(amount_in_inr * 100))
         phone = customer_phone or "+919876543210"
+        requested_mode = force_mode or self.current_mode_label
 
-        if self.is_live_test_mode:
+        if requested_mode == "TEST_MODE" and self.is_live_test_mode:
             try:
-                async with httpx.AsyncClient(timeout=10.0) as client:
+                async with httpx.AsyncClient(timeout=12.0) as client:
                     response = await client.post(
                         f"{self.BASE_URL}/payment_links",
                         headers=self._get_auth_header(),
@@ -134,18 +154,29 @@ class RazorpayService:
                     if response.status_code in [200, 201]:
                         data = response.json()
                         data["mode"] = "TEST_MODE"
+                        logger.info(f"Razorpay Payment Link generated: {data.get('short_url')}")
                         return data
                     else:
-                        logger.warning(f"Razorpay Payment Link API error: {response.text}")
+                        logger.error(f"Razorpay Payment Link error HTTP {response.status_code}: {response.text[:200]}")
+                        return {
+                            "error": f"Razorpay Payment Link error ({response.status_code})",
+                            "mode": "TEST_MODE",
+                            "status": "failed"
+                        }
             except Exception as e:
-                logger.error(f"Razorpay Payment Link error: {e}")
+                logger.error(f"Razorpay Payment Link exception: {e}")
+                return {
+                    "error": str(e),
+                    "mode": "TEST_MODE",
+                    "status": "failed"
+                }
 
         # Simulation Mode
-        link_id = f"plink_test_{uuid.uuid4().hex[:12]}"
+        link_id = f"plink_sim_{uuid.uuid4().hex[:12]}"
         return {
             "id": link_id,
             "entity": "payment_link",
-            "short_url": f"https://rzp.io/i/test_{uuid.uuid4().hex[:8]}",
+            "short_url": f"https://rzp.io/i/sim_{uuid.uuid4().hex[:8]}",
             "amount": amount_paise,
             "currency": "INR",
             "status": "created",
@@ -159,9 +190,9 @@ class RazorpayService:
             "mode": "SIMULATION_MODE"
         }
 
-    async def check_payment_status(self, payment_id: str) -> Dict[str, Any]:
+    async def fetch_payment(self, payment_id: str) -> Dict[str, Any]:
         """
-        Queries Razorpay for payment status or generates simulated response.
+        Fetches payment details directly from Razorpay Test API.
         """
         if self.is_live_test_mode and not payment_id.startswith("pay_sim_"):
             try:
@@ -175,9 +206,9 @@ class RazorpayService:
                         data["mode"] = "TEST_MODE"
                         return data
             except Exception as e:
-                logger.error(f"Error checking payment status: {e}")
+                logger.error(f"Error checking payment {payment_id}: {e}")
 
-        # Simulation Mode
+        # Simulation Fallback
         return {
             "id": payment_id,
             "entity": "payment",
@@ -189,5 +220,52 @@ class RazorpayService:
             "mode": "SIMULATION_MODE"
         }
 
+    async def fetch_order_payments(self, order_id: str) -> List[Dict[str, Any]]:
+        """
+        Fetches all payments associated with a Razorpay Order to verify capture.
+        """
+        if self.is_live_test_mode and not order_id.startswith("order_sim_"):
+            try:
+                async with httpx.AsyncClient(timeout=10.0) as client:
+                    response = await client.get(
+                        f"{self.BASE_URL}/orders/{order_id}/payments",
+                        headers=self._get_auth_header()
+                    )
+                    if response.status_code == 200:
+                        data = response.json()
+                        return data.get("items", [])
+            except Exception as e:
+                logger.error(f"Error fetching payments for order {order_id}: {e}")
+        return []
+
+    def verify_payment_signature(self, order_id: str, payment_id: str, signature: str) -> bool:
+        """
+        Verifies Razorpay payment signature using HMAC SHA256.
+        """
+        if not self.key_secret or not order_id or not payment_id or not signature:
+            return False
+        try:
+            msg = f"{order_id}|{payment_id}".encode("utf-8")
+            expected = hmac.new(self.key_secret.encode("utf-8"), msg, hashlib.sha256).hexdigest()
+            return hmac.compare_digest(expected, signature)
+        except Exception as e:
+            logger.error(f"Signature verification failed: {e}")
+            return False
+
+    def verify_webhook_signature(self, payload_body: bytes, signature: str, secret: Optional[str] = None) -> bool:
+        """
+        Verifies Razorpay Webhook signature using HMAC SHA256.
+        """
+        webhook_key = secret or self.webhook_secret or self.key_secret
+        if not webhook_key or not signature:
+            return False
+        try:
+            expected = hmac.new(webhook_key.encode("utf-8"), payload_body, hashlib.sha256).hexdigest()
+            return hmac.compare_digest(expected, signature)
+        except Exception as e:
+            logger.error(f"Webhook signature verification exception: {e}")
+            return False
+
 # Global Singleton Instance
 razorpay_service = RazorpayService()
+

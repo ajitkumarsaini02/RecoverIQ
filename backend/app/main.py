@@ -7,6 +7,7 @@ from app.api.routes_transactions import router as transactions_router
 from app.api.routes_demo import router as demo_router
 from app.api.routes_agent_and_recovery import router as agent_router
 from app.api.routes_dashboard_and_simulation import router as dashboard_router
+from app.api.routes_webhook import router as webhook_router
 from app.db.session import SessionLocal, engine, Base
 from app.services.seed_service import seed_database
 
@@ -42,6 +43,7 @@ app.include_router(transactions_router)
 app.include_router(demo_router)
 app.include_router(agent_router)
 app.include_router(dashboard_router)
+app.include_router(webhook_router)
 
 @app.get("/")
 def root():

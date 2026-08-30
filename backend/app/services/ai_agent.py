@@ -105,30 +105,181 @@ class RecoveryAIAgent:
             try:
                 live_result = self._call_llm_api(context)
                 if live_result:
+                    logger.info(f"Gemini AI reasoning successful for txn {context.transaction_id} using {live_result.model_used}")
                     return live_result
             except Exception as e:
-                logger.warning(f"LLM API call failed: {e}. Gracefully activating DEMO fallback rule engine.")
+                logger.warning(f"Live LLM API call failed ({type(e).__name__}): {e}. Gracefully activating heuristic fallback engine.")
 
         # Default / Graceful Fallback Heuristics Engine
         return self._run_expert_heuristics(context)
 
     def _call_llm_api(self, ctx: AIAnalysisInput) -> Optional[AIAgentRecommendation]:
         """
-        Calls external LLM (Gemini or OpenAI) with structured JSON schema when API key is provided.
+        Calls external LLM (Google Gemini or OpenAI) with structured JSON schema when API key is provided.
         """
-        # Structured prompt
+        if settings.LLM_PROVIDER == "gemini" and settings.GEMINI_API_KEY:
+            return self._call_gemini_api(ctx)
+        elif settings.LLM_PROVIDER == "openai" and settings.OPENAI_API_KEY:
+            return self._call_openai_api(ctx)
+        return None
+
+    def _call_gemini_api(self, ctx: AIAnalysisInput) -> Optional[AIAgentRecommendation]:
+        """
+        Executes real Google Gemini API call using REST endpoint with JSON schema output.
+        """
+        import httpx
+
+        model = settings.GEMINI_MODEL or "gemini-1.5-flash"
+        api_url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={settings.GEMINI_API_KEY}"
+
+        system_prompt = (
+            "You are RecoverIQ, an expert fintech revenue recovery AI agent specialized in Indian payment systems (UPI, Card, Netbanking, Razorpay). "
+            "Analyze the payment failure context and customer history. Output ONLY strict JSON adhering to the following schema:\n"
+            "{\n"
+            '  "diagnosis": "string (clear technical & behavioral root cause)",\n'
+            '  "recovery_probability": float (0.0 to 1.0 calibrated probability of successful recovery),\n'
+            '  "recommended_action": "RETRY_PAYMENT" | "PAYMENT_LINK" | "ALTERNATIVE_PAYMENT_METHOD" | "REMINDER" | "HUMAN_ESCALATION" | "STOP",\n'
+            '  "risk_level": "LOW" | "MEDIUM" | "HIGH",\n'
+            '  "reason": "string (explainable reasoning grounding the decision in customer LTV and transaction parameters)",\n'
+            '  "requires_human_approval": boolean\n'
+            "}\n"
+            "Action guidelines:\n"
+            "- RETRY_PAYMENT: For transient UPI/gateway timeouts with low risk and high LTV customers.\n"
+            "- ALTERNATIVE_PAYMENT_METHOD: For bank issuer declines or payment method specific errors.\n"
+            "- PAYMENT_LINK: For insufficient funds or high-value orders requiring white-glove links.\n"
+            "- STOP: If retry limit reached (>=2) or customer has repeated chronic failures.\n"
+            "- HUMAN_ESCALATION: For high-risk or enterprise transactions exceeding thresholds."
+        )
+
+        user_prompt = f"Failed Transaction & Customer Context:\n{ctx.model_dump_json(indent=2)}"
+
+        payload = {
+            "contents": [
+                {
+                    "parts": [
+                        {
+                            "text": f"{system_prompt}\n\n{user_prompt}"
+                        }
+                    ]
+                }
+            ],
+            "generationConfig": {
+                "response_mime_type": "application/json",
+                "temperature": 0.1
+            }
+        }
+
+        try:
+            with httpx.Client(timeout=15.0) as client:
+                response = client.post(api_url, json=payload)
+                if response.status_code != 200:
+                    logger.error(f"Gemini API returned HTTP {response.status_code}: {response.text[:200]}")
+                    return None
+
+                res_data = response.json()
+                candidates = res_data.get("candidates", [])
+                if not candidates:
+                    logger.warning("Gemini API returned no candidates.")
+                    return None
+
+                content_text = candidates[0].get("content", {}).get("parts", [{}])[0].get("text", "")
+                if not content_text:
+                    return None
+
+                parsed = json.loads(content_text)
+
+                # Normalize action
+                raw_action = str(parsed.get("recommended_action", "PAYMENT_LINK")).upper()
+                if raw_action in ["STOP_RECOVERY", "HALT", "CANCEL"]:
+                    raw_action = "STOP"
+                elif raw_action in ["HUMAN_APPROVAL", "ESCALATE"]:
+                    raw_action = "HUMAN_ESCALATION"
+                elif raw_action not in ["RETRY_PAYMENT", "PAYMENT_LINK", "ALTERNATIVE_PAYMENT_METHOD", "REMINDER", "HUMAN_ESCALATION", "STOP"]:
+                    raw_action = "PAYMENT_LINK"
+
+                # Normalize risk
+                raw_risk = str(parsed.get("risk_level", "LOW")).upper()
+                if raw_risk not in ["LOW", "MEDIUM", "HIGH"]:
+                    raw_risk = "MEDIUM"
+
+                # Probability
+                prob = float(parsed.get("recovery_probability", 0.5))
+                prob = max(0.0, min(1.0, prob))
+
+                return AIAgentRecommendation(
+                    diagnosis=str(parsed.get("diagnosis", "Automated AI failure diagnosis")),
+                    recovery_probability=round(prob, 2),
+                    recommended_action=raw_action,
+                    risk_level=raw_risk,
+                    reason=str(parsed.get("reason", "AI assessed customer payment parameters.")),
+                    requires_human_approval=bool(parsed.get("requires_human_approval", False) or ctx.amount >= 20000.0),
+                    mode="GEMINI",
+                    model_used=f"Google Gemini ({model})",
+                    fallback_used=False
+                )
+        except Exception as e:
+            logger.warning(f"Gemini API execution error ({type(e).__name__}): {e}")
+            return None
+
+    def _call_openai_api(self, ctx: AIAnalysisInput) -> Optional[AIAgentRecommendation]:
+        """
+        Executes OpenAI Chat Completion call with JSON output when configured.
+        """
+        import httpx
+
+        headers = {
+            "Authorization": f"Bearer {settings.OPENAI_API_KEY}",
+            "Content-Type": "application/json"
+        }
+
         system_prompt = (
             "You are RecoverIQ, an expert fintech revenue recovery AI agent. "
-            "Analyze the payment failure and customer context. Output JSON strictly adhering to schema with: "
-            "diagnosis, recovery_probability (0.0 to 1.0), recommended_action (RETRY_PAYMENT, PAYMENT_LINK, "
+            "Analyze the payment failure and output strictly formatted JSON with: "
+            "diagnosis, recovery_probability (0.0-1.0), recommended_action (RETRY_PAYMENT, PAYMENT_LINK, "
             "ALTERNATIVE_PAYMENT_METHOD, REMINDER, HUMAN_ESCALATION, STOP), risk_level (LOW, MEDIUM, HIGH), "
             "reason, requires_human_approval (boolean)."
         )
-        user_prompt = f"Failed Payment Context: {ctx.model_dump_json()}"
 
-        # If LLM API integration is enabled via httpx, execute here.
-        # Otherwise return None to trigger domain-expert fallback.
-        return None
+        payload = {
+            "model": "gpt-4o-mini",
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": f"Context: {ctx.model_dump_json()}"}
+            ],
+            "response_format": {"type": "json_object"},
+            "temperature": 0.1
+        }
+
+        try:
+            with httpx.Client(timeout=15.0) as client:
+                response = client.post("https://api.openai.com/v1/chat/completions", headers=headers, json=payload)
+                if response.status_code != 200:
+                    logger.error(f"OpenAI API returned HTTP {response.status_code}: {response.text[:200]}")
+                    return None
+
+                res_json = response.json()
+                content_str = res_json["choices"][0]["message"]["content"]
+                parsed = json.loads(content_str)
+
+                prob = max(0.0, min(1.0, float(parsed.get("recovery_probability", 0.5))))
+                raw_action = str(parsed.get("recommended_action", "PAYMENT_LINK")).upper()
+                if raw_action not in ["RETRY_PAYMENT", "PAYMENT_LINK", "ALTERNATIVE_PAYMENT_METHOD", "REMINDER", "HUMAN_ESCALATION", "STOP"]:
+                    raw_action = "PAYMENT_LINK"
+
+                return AIAgentRecommendation(
+                    diagnosis=str(parsed.get("diagnosis", "AI failure diagnosis")),
+                    recovery_probability=round(prob, 2),
+                    recommended_action=raw_action,
+                    risk_level=str(parsed.get("risk_level", "LOW")).upper() if str(parsed.get("risk_level", "LOW")).upper() in ["LOW", "MEDIUM", "HIGH"] else "MEDIUM",
+                    reason=str(parsed.get("reason", "OpenAI assessed transaction parameters.")),
+                    requires_human_approval=bool(parsed.get("requires_human_approval", False) or ctx.amount >= 20000.0),
+                    mode="OPENAI",
+                    model_used="OpenAI (gpt-4o-mini)",
+                    fallback_used=False
+                )
+        except Exception as e:
+            logger.warning(f"OpenAI API execution error: {e}")
+            return None
 
     def _run_expert_heuristics(self, ctx: AIAnalysisInput) -> AIAgentRecommendation:
         """

@@ -33,11 +33,16 @@ class RecoveryExecutionService:
     Failed Payment -> AI Analysis -> Policy Validation -> Recovery Action -> Result.
     """
 
-    async def execute_recovery(self, db: Session, transaction: Transaction) -> RecoveryExecutionResponse:
+    async def execute_recovery(
+        self, 
+        db: Session, 
+        transaction: Transaction,
+        mode: Optional[str] = None
+    ) -> RecoveryExecutionResponse:
         now = datetime.now(timezone.utc)
         now_iso = now.isoformat()
 
-        # Check if already recovered
+        # Idempotency Guard 1: Already recovered
         if transaction.status == "RECOVERED":
             return RecoveryExecutionResponse(
                 transaction_id=transaction.id,
@@ -45,13 +50,28 @@ class RecoveryExecutionService:
                 status="SUCCESS",
                 amount_recovered=transaction.amount,
                 timestamp=now_iso,
-                mode=razorpay_service.current_mode_label,
-                message="Transaction has already been successfully recovered.",
-                details={"already_recovered": True}
+                mode=mode or razorpay_service.current_mode_label,
+                message="Transaction has already been successfully recovered (Idempotent response).",
+                details={"already_recovered": True, "idempotent": True}
             )
 
+        # Idempotency Guard 2: Prevent rapid back-to-back click race condition (within 5 seconds)
+        if transaction.last_recovery_attempt_at:
+            delta_seconds = (now - transaction.last_recovery_attempt_at.replace(tzinfo=timezone.utc)).total_seconds()
+            if delta_seconds < 5.0 and transaction.status in ["RECOVERY_PENDING", "APPROVAL_REQUIRED"]:
+                return RecoveryExecutionResponse(
+                    transaction_id=transaction.id,
+                    action="COOLDOWN",
+                    status="PENDING",
+                    amount_recovered=0.0,
+                    timestamp=now_iso,
+                    mode=mode or razorpay_service.current_mode_label,
+                    message="Recovery is already being processed. Please wait for previous action to finalize.",
+                    details={"in_progress": True, "cooldown_remaining": round(5.0 - delta_seconds, 1)}
+                )
+
         customer = transaction.customer
-        current_mode = razorpay_service.current_mode_label
+        current_mode = mode or ("TEST_MODE" if razorpay_service.is_live_test_mode else "SIMULATION_MODE")
 
         # 1. AI Analysis (Failure diagnosis + customer context)
         ai_recommendation = ai_agent.analyze_failure(transaction=transaction, customer=customer)
@@ -207,60 +227,160 @@ class RecoveryExecutionService:
 
         if action_type in ["RETRY_PAYMENT", "ALTERNATIVE_PAYMENT_METHOD"]:
             try:
-                # Create Razorpay Test order or simulated capture
+                # Create Razorpay Test Order
                 order_data = await razorpay_service.create_order(
                     amount_in_inr=transaction.amount,
-                    receipt=f"rcpt_recov_{uuid.uuid4().hex[:6]}"
+                    receipt=f"rcpt_recov_{uuid.uuid4().hex[:6]}",
+                    force_mode=current_mode
                 )
 
-                transaction.status = "RECOVERED"
                 transaction.retry_count += 1
                 transaction.last_recovery_attempt_at = now
                 transaction.razorpay_order_id = order_data.get("id")
                 transaction.updated_at = now
 
-                action_record = RecoveryAction(
-                    id=f"act_{uuid.uuid4().hex[:12]}",
-                    transaction_id=transaction.id,
-                    action_type=action_type,
-                    status="SUCCESS",
-                    ai_diagnosis=ai_recommendation.diagnosis,
-                    ai_probability=ai_recommendation.recovery_probability,
-                    ai_risk_level=ai_recommendation.risk_level,
-                    ai_reasoning=ai_recommendation.reason,
-                    policy_allowed=True,
-                    policy_reasons_json=json.dumps(policy_res.reasons),
-                    requires_human_approval=False,
-                    recovered_amount=transaction.amount,
-                    execution_details_json=json.dumps({"order_id": order_data.get("id"), "mode": current_mode}),
-                    mode=current_mode,
-                    created_at=now,
-                    executed_at=now
-                )
-                db.add(action_record)
+                # In SIMULATION_MODE: simulate capture
+                if current_mode == "SIMULATION_MODE":
+                    transaction.status = "RECOVERED"
+                    recovered_amount = transaction.amount
+                    sim_pay_id = f"pay_sim_{uuid.uuid4().hex[:10]}"
+                    transaction.razorpay_payment_id = sim_pay_id
 
-                # Audit: RECOVERY_SUCCEEDED
-                audit_service.log_recovery_succeeded(
-                    db=db,
-                    transaction_id=transaction.id,
-                    amount_recovered=transaction.amount,
-                    mode=current_mode
-                )
-                db.commit()
+                    action_record = RecoveryAction(
+                        id=f"act_{uuid.uuid4().hex[:12]}",
+                        transaction_id=transaction.id,
+                        action_type=action_type,
+                        status="SUCCESS",
+                        ai_diagnosis=ai_recommendation.diagnosis,
+                        ai_probability=ai_recommendation.recovery_probability,
+                        ai_risk_level=ai_recommendation.risk_level,
+                        ai_reasoning=ai_recommendation.reason,
+                        policy_allowed=True,
+                        policy_reasons_json=json.dumps(policy_res.reasons),
+                        requires_human_approval=False,
+                        recovered_amount=recovered_amount,
+                        execution_details_json=json.dumps({"order_id": order_data.get("id"), "payment_id": sim_pay_id, "mode": "SIMULATION_MODE"}),
+                        mode="SIMULATION_MODE",
+                        created_at=now,
+                        executed_at=now
+                    )
+                    db.add(action_record)
 
-                return RecoveryExecutionResponse(
-                    transaction_id=transaction.id,
-                    action=action_type,
-                    status="SUCCESS",
-                    amount_recovered=transaction.amount,
-                    timestamp=now_iso,
-                    mode=current_mode,
-                    message=f"Successfully executed {action_type}. Revenue recovered: ₹{transaction.amount:,.0f}",
-                    details={"order_id": order_data.get("id"), "retries": transaction.retry_count},
-                    ai_diagnosis=ai_recommendation.diagnosis,
-                    ai_probability=ai_recommendation.recovery_probability,
-                    policy_reason=policy_res.reason
-                )
+                    audit_service.log_payment_recovered(
+                        db=db,
+                        transaction_id=transaction.id,
+                        amount_recovered=recovered_amount,
+                        payment_id=sim_pay_id,
+                        mode="SIMULATION_MODE"
+                    )
+                    db.commit()
+
+                    return RecoveryExecutionResponse(
+                        transaction_id=transaction.id,
+                        action=action_type,
+                        status="SUCCESS",
+                        amount_recovered=recovered_amount,
+                        timestamp=now_iso,
+                        mode="SIMULATION_MODE",
+                        message=f"Simulated payment retry executed successfully. Revenue recovered: ₹{transaction.amount:,.0f}",
+                        details={"order_id": order_data.get("id"), "payment_id": sim_pay_id, "simulated": True},
+                        ai_diagnosis=ai_recommendation.diagnosis,
+                        ai_probability=ai_recommendation.recovery_probability,
+                        policy_reason=policy_res.reason
+                    )
+
+                # In TEST_MODE: Real Razorpay Test Order created.
+                # Check if payment was immediately verified or remains pending customer checkout.
+                payments = await razorpay_service.fetch_order_payments(order_data.get("id", ""))
+                is_captured = any(p.get("status") == "captured" for p in payments)
+
+                if is_captured:
+                    captured_pay = next(p for p in payments if p.get("status") == "captured")
+                    transaction.status = "RECOVERED"
+                    transaction.razorpay_payment_id = captured_pay.get("id")
+                    recovered_amount = float(captured_pay.get("amount", 0)) / 100.0
+
+                    action_record = RecoveryAction(
+                        id=f"act_{uuid.uuid4().hex[:12]}",
+                        transaction_id=transaction.id,
+                        action_type=action_type,
+                        status="SUCCESS",
+                        ai_diagnosis=ai_recommendation.diagnosis,
+                        ai_probability=ai_recommendation.recovery_probability,
+                        ai_risk_level=ai_recommendation.risk_level,
+                        ai_reasoning=ai_recommendation.reason,
+                        policy_allowed=True,
+                        policy_reasons_json=json.dumps(policy_res.reasons),
+                        requires_human_approval=False,
+                        recovered_amount=recovered_amount,
+                        execution_details_json=json.dumps({"order_id": order_data.get("id"), "payment_id": captured_pay.get("id"), "mode": "TEST_MODE"}),
+                        mode="TEST_MODE",
+                        created_at=now,
+                        executed_at=now
+                    )
+                    db.add(action_record)
+
+                    audit_service.log_payment_recovered(
+                        db=db,
+                        transaction_id=transaction.id,
+                        amount_recovered=recovered_amount,
+                        payment_id=captured_pay.get("id"),
+                        mode="TEST_MODE"
+                    )
+                    db.commit()
+
+                    return RecoveryExecutionResponse(
+                        transaction_id=transaction.id,
+                        action=action_type,
+                        status="SUCCESS",
+                        amount_recovered=recovered_amount,
+                        timestamp=now_iso,
+                        mode="TEST_MODE",
+                        message=f"Razorpay Test Payment verified and captured. Revenue captured: ₹{recovered_amount:,.0f}",
+                        details={"order_id": order_data.get("id"), "payment_id": captured_pay.get("id"), "verified": True},
+                        ai_diagnosis=ai_recommendation.diagnosis,
+                        ai_probability=ai_recommendation.recovery_probability,
+                        policy_reason=policy_res.reason
+                    )
+                else:
+                    # Order is created and awaiting payment capture
+                    transaction.status = "RECOVERY_PENDING"
+                    recovered_amount = 0.0
+
+                    action_record = RecoveryAction(
+                        id=f"act_{uuid.uuid4().hex[:12]}",
+                        transaction_id=transaction.id,
+                        action_type=action_type,
+                        status="PENDING",
+                        ai_diagnosis=ai_recommendation.diagnosis,
+                        ai_probability=ai_recommendation.recovery_probability,
+                        ai_risk_level=ai_recommendation.risk_level,
+                        ai_reasoning=ai_recommendation.reason,
+                        policy_allowed=True,
+                        policy_reasons_json=json.dumps(policy_res.reasons),
+                        requires_human_approval=False,
+                        recovered_amount=0.0,
+                        execution_details_json=json.dumps({"order_id": order_data.get("id"), "mode": "TEST_MODE", "status": "order_created"}),
+                        mode="TEST_MODE",
+                        created_at=now
+                    )
+                    db.add(action_record)
+                    db.commit()
+
+                    return RecoveryExecutionResponse(
+                        transaction_id=transaction.id,
+                        action=action_type,
+                        status="PENDING",
+                        amount_recovered=0.0,
+                        timestamp=now_iso,
+                        mode="TEST_MODE",
+                        message=f"Razorpay Test Order created ({order_data.get('id')}). Awaiting payment verification or webhook.",
+                        details={"order_id": order_data.get("id"), "verified": False, "pending_payment": True},
+                        ai_diagnosis=ai_recommendation.diagnosis,
+                        ai_probability=ai_recommendation.recovery_probability,
+                        policy_reason=policy_res.reason
+                    )
+
             except Exception as e:
                 logger.error(f"Recovery execution failed: {e}")
                 transaction.status = "FAILED"
@@ -287,7 +407,6 @@ class RecoveryExecutionService:
                 )
                 db.add(action_record)
 
-                # Audit: RECOVERY_FAILED
                 audit_service.log_recovery_failed(
                     db=db,
                     transaction_id=transaction.id,
@@ -319,7 +438,8 @@ class RecoveryExecutionService:
                 customer_name=cust_name,
                 customer_email=cust_email,
                 customer_phone=cust_phone,
-                description=f"RecoverIQ Payment Link for Txn {transaction.id}"
+                description=f"RecoverIQ Payment Link for Txn {transaction.id}",
+                force_mode=current_mode
             )
 
             transaction.status = "RECOVERY_PENDING"
@@ -330,7 +450,7 @@ class RecoveryExecutionService:
                 id=f"act_{uuid.uuid4().hex[:12]}",
                 transaction_id=transaction.id,
                 action_type="PAYMENT_LINK",
-                status="SUCCESS",
+                status="PENDING",
                 ai_diagnosis=ai_recommendation.diagnosis,
                 ai_probability=ai_recommendation.recovery_probability,
                 ai_risk_level=ai_recommendation.risk_level,
@@ -341,8 +461,7 @@ class RecoveryExecutionService:
                 recovered_amount=0.0,
                 execution_details_json=json.dumps(plink),
                 mode=current_mode,
-                created_at=now,
-                executed_at=now
+                created_at=now
             )
             db.add(action_record)
             db.commit()
@@ -354,8 +473,8 @@ class RecoveryExecutionService:
                 amount_recovered=0.0,
                 timestamp=now_iso,
                 mode=current_mode,
-                message=f"Razorpay Payment Link generated and sent to customer: {plink.get('short_url')}",
-                details={"payment_link": plink.get("short_url"), "link_id": plink.get("id")},
+                message=f"Razorpay Payment Link generated ({plink.get('short_url')}). Awaiting customer payment.",
+                details={"payment_link": plink.get("short_url"), "link_id": plink.get("id"), "verified": False},
                 ai_diagnosis=ai_recommendation.diagnosis,
                 ai_probability=ai_recommendation.recovery_probability,
                 policy_reason=policy_res.reason
@@ -399,6 +518,21 @@ class RecoveryExecutionService:
                 ai_probability=ai_recommendation.recovery_probability,
                 policy_reason=policy_res.reason
             )
+
+        # Fallback
+        return RecoveryExecutionResponse(
+            transaction_id=transaction.id,
+            action=action_type,
+            status="PENDING",
+            amount_recovered=0.0,
+            timestamp=now_iso,
+            mode=current_mode,
+            message="Recovery action initiated.",
+            details={},
+            ai_diagnosis=ai_recommendation.diagnosis,
+            ai_probability=ai_recommendation.recovery_probability,
+            policy_reason=policy_res.reason
+        )
 
         # Fallback
         return RecoveryExecutionResponse(

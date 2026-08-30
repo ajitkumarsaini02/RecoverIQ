@@ -174,4 +174,37 @@ class AuditService:
             details={"reason": reason}
         )
 
+    @staticmethod
+    def log_payment_verification(db: Session, transaction_id: str, payment_id: Optional[str], status: str, verified: bool, mode: str):
+        return AuditService.log_event(
+            db=db,
+            event_type="PAYMENT_VERIFICATION",
+            actor="RAZORPAY_GATEWAY",
+            transaction_id=transaction_id,
+            decision="VERIFIED_CAPTURED" if verified else "VERIFICATION_FAILED_OR_PENDING",
+            details={"payment_id": payment_id, "status": status, "verified": verified, "mode": mode}
+        )
+
+    @staticmethod
+    def log_webhook_received(db: Session, transaction_id: Optional[str], event: str, payment_id: Optional[str], order_id: Optional[str]):
+        return AuditService.log_event(
+            db=db,
+            event_type="WEBHOOK_RECEIVED",
+            actor="RAZORPAY_GATEWAY",
+            transaction_id=transaction_id,
+            decision="EVENT_PROCESSED",
+            details={"webhook_event": event, "payment_id": payment_id, "order_id": order_id}
+        )
+
+    @staticmethod
+    def log_payment_recovered(db: Session, transaction_id: str, amount_recovered: float, payment_id: Optional[str], mode: str):
+        return AuditService.log_event(
+            db=db,
+            event_type="PAYMENT_RECOVERED",
+            actor="RAZORPAY_GATEWAY",
+            transaction_id=transaction_id,
+            decision="REVENUE_RECOVERED",
+            details={"recovered_amount": amount_recovered, "payment_id": payment_id, "mode": mode}
+        )
+
 audit_service = AuditService()

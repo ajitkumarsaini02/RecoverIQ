@@ -119,9 +119,15 @@ export async function runSimulation(): Promise<any> {
   return res.json();
 }
 
-export async function runDemoScenario(scenarioKey: string): Promise<DemoScenarioResult> {
+export async function runDemoScenario(
+  scenarioKey: string, 
+  mode?: 'TEST_MODE' | 'SIMULATION_MODE'
+): Promise<DemoScenarioResult> {
   const url = `${API_BASE}/demo/scenario`;
-  const payload = { scenario: scenarioKey, scenario_id: scenarioKey };
+  const payload: Record<string, any> = { scenario: scenarioKey, scenario_id: scenarioKey };
+  if (mode) {
+    payload.mode = mode;
+  }
   console.log(`[RecoverIQ Network] Dispatching POST ${url}`, payload);
   try {
     const res = await fetch(url, {

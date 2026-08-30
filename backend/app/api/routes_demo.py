@@ -26,6 +26,7 @@ class DemoPaymentRequest(BaseModel):
 class DemoScenarioRequest(BaseModel):
     scenario: Optional[str] = Field(default=None, description="Scenario ID")
     scenario_id: Optional[str] = Field(default=None, description="Scenario ID alias")
+    mode: Optional[str] = Field(default=None, description="Execution Mode: TEST_MODE or SIMULATION_MODE")
 
 PRESET_SCENARIOS = {
     "temporary_upi_failure": {
@@ -141,8 +142,9 @@ PRESET_SCENARIOS = {
 @router.post("/scenario")
 async def run_scenario(request: DemoScenarioRequest, db: Session = Depends(get_db)):
     """
-    Executes the flagship 7-step real-world demo flow:
-    Payment Attempt -> Failure -> AI Diagnosis -> Policy Engine Guardrails -> Safe Execution -> Success & Audit.
+    Executes the flagship 7-step revenue recovery pipeline:
+    Payment Attempt -> Failure -> AI Diagnosis -> Policy Engine Guardrails -> Safe Execution -> Verification & Audit.
+    Supports explicit TEST_MODE (real Razorpay + Gemini) and SIMULATION_MODE.
     """
     raw_key = request.scenario or request.scenario_id or ""
     scenario_key = raw_key.lower().replace(" ", "_")
@@ -155,6 +157,9 @@ async def run_scenario(request: DemoScenarioRequest, db: Session = Depends(get_d
     spec = PRESET_SCENARIOS[scenario_key]
     cust_data = spec["customer"]
     now = datetime.now(timezone.utc)
+
+    # Determine execution mode
+    exec_mode = request.mode or ("TEST_MODE" if razorpay_service.is_live_test_mode else "SIMULATION_MODE")
 
     # 1. Create / Retrieve Customer
     cust_id = f"cust_demo_{uuid.uuid4().hex[:8]}"
@@ -177,7 +182,8 @@ async def run_scenario(request: DemoScenarioRequest, db: Session = Depends(get_d
     order_result = await razorpay_service.create_order(
         amount_in_inr=spec["amount"],
         receipt=f"rcpt_demo_{uuid.uuid4().hex[:6]}",
-        notes={"scenario": spec["title"]}
+        notes={"scenario": spec["title"]},
+        force_mode=exec_mode
     )
 
     # 3. Create Failed Transaction in DB
@@ -216,7 +222,7 @@ async def run_scenario(request: DemoScenarioRequest, db: Session = Depends(get_d
             "failure_reason": spec["failure_reason"],
             "error_code": spec["error_code"],
             "razorpay_order_id": order_result.get("id"),
-            "mode": order_result.get("mode")
+            "mode": exec_mode
         })
     )
     db.add(aud_fail)
@@ -238,7 +244,8 @@ async def run_scenario(request: DemoScenarioRequest, db: Session = Depends(get_d
             "risk_level": ai_analysis.risk_level,
             "reason": ai_analysis.reason,
             "requires_human_approval": ai_analysis.requires_human_approval,
-            "model_used": ai_analysis.model_used
+            "model_used": ai_analysis.model_used,
+            "fallback_used": ai_analysis.fallback_used
         })
     )
     db.add(aud_ai)
@@ -271,7 +278,7 @@ async def run_scenario(request: DemoScenarioRequest, db: Session = Depends(get_d
         "action_type": policy_res.action,
         "status": "PENDING",
         "recovered_amount": 0.0,
-        "mode": order_result.get("mode", "TEST_MODE"),
+        "mode": exec_mode,
         "executed_at": (now + timedelta(milliseconds=700)).isoformat(),
         "message": ""
     }
@@ -296,7 +303,7 @@ async def run_scenario(request: DemoScenarioRequest, db: Session = Depends(get_d
             requires_human_approval=True,
             recovered_amount=0.0,
             execution_details_json=json.dumps({"gated": True, "threshold": 20000.0}),
-            mode=order_result.get("mode", "TEST_MODE"),
+            mode=exec_mode,
             created_at=now + timedelta(milliseconds=500)
         )
         db.add(action_rec)
@@ -330,7 +337,7 @@ async def run_scenario(request: DemoScenarioRequest, db: Session = Depends(get_d
             policy_reasons_json=json.dumps(policy_res.reasons),
             requires_human_approval=False,
             recovered_amount=0.0,
-            mode=order_result.get("mode", "TEST_MODE"),
+            mode=exec_mode,
             created_at=now + timedelta(milliseconds=500),
             executed_at=now + timedelta(milliseconds=600)
         )
@@ -350,47 +357,124 @@ async def run_scenario(request: DemoScenarioRequest, db: Session = Depends(get_d
     else:
         # Policy Approved -> Execute Recovery
         if policy_res.action in ["RETRY_PAYMENT", "ALTERNATIVE_PAYMENT_METHOD"]:
-            # Successful test mode recovery
-            txn.status = "RECOVERED"
-            txn.retry_count += 1
-            execution_result["status"] = "SUCCESS"
-            execution_result["recovered_amount"] = txn.amount
-            execution_result["message"] = f"Recovery executed successfully via {order_result.get('mode')}. Payment verified and revenue captured."
+            if exec_mode == "SIMULATION_MODE":
+                txn.status = "RECOVERED"
+                txn.retry_count += 1
+                sim_pay_id = f"pay_sim_{uuid.uuid4().hex[:12]}"
+                txn.razorpay_payment_id = sim_pay_id
+                execution_result["status"] = "SUCCESS"
+                execution_result["recovered_amount"] = txn.amount
+                execution_result["message"] = f"Simulated recovery executed successfully. ₹{txn.amount:,.0f} recovered (Simulation Sandbox)."
 
-            action_rec = RecoveryAction(
-                id=f"act_{uuid.uuid4().hex[:12]}",
-                transaction_id=txn.id,
-                action_type=policy_res.action,
-                status="SUCCESS",
-                ai_diagnosis=ai_analysis.diagnosis,
-                ai_probability=ai_analysis.recovery_probability,
-                ai_risk_level=ai_analysis.risk_level,
-                ai_reasoning=ai_analysis.reason,
-                policy_allowed=True,
-                policy_reasons_json=json.dumps(policy_res.reasons),
-                requires_human_approval=False,
-                recovered_amount=txn.amount,
-                execution_details_json=json.dumps({"payment_id": f"pay_test_{uuid.uuid4().hex[:12]}", "status": "captured"}),
-                mode=order_result.get("mode", "TEST_MODE"),
-                created_at=now + timedelta(milliseconds=500),
-                executed_at=now + timedelta(milliseconds=700)
-            )
-            db.add(action_rec)
+                action_rec = RecoveryAction(
+                    id=f"act_{uuid.uuid4().hex[:12]}",
+                    transaction_id=txn.id,
+                    action_type=policy_res.action,
+                    status="SUCCESS",
+                    ai_diagnosis=ai_analysis.diagnosis,
+                    ai_probability=ai_analysis.recovery_probability,
+                    ai_risk_level=ai_analysis.risk_level,
+                    ai_reasoning=ai_analysis.reason,
+                    policy_allowed=True,
+                    policy_reasons_json=json.dumps(policy_res.reasons),
+                    requires_human_approval=False,
+                    recovered_amount=txn.amount,
+                    execution_details_json=json.dumps({"payment_id": sim_pay_id, "status": "simulated_captured"}),
+                    mode="SIMULATION_MODE",
+                    created_at=now + timedelta(milliseconds=500),
+                    executed_at=now + timedelta(milliseconds=700)
+                )
+                db.add(action_rec)
 
-            aud_succ = AuditEvent(
-                id=f"aud_{uuid.uuid4().hex[:12]}",
-                timestamp=now + timedelta(milliseconds=700),
-                transaction_id=txn.id,
-                event_type="PAYMENT_RECOVERED",
-                actor="AI_AGENT",
-                decision="REVENUE_RECOVERED",
-                details_json=json.dumps({
-                    "recovered_amount": txn.amount,
-                    "mode": order_result.get("mode", "TEST_MODE"),
-                    "action": policy_res.action
-                })
-            )
-            db.add(aud_succ)
+                aud_succ = AuditEvent(
+                    id=f"aud_{uuid.uuid4().hex[:12]}",
+                    timestamp=now + timedelta(milliseconds=700),
+                    transaction_id=txn.id,
+                    event_type="PAYMENT_RECOVERED",
+                    actor="AI_AGENT",
+                    decision="REVENUE_RECOVERED",
+                    details_json=json.dumps({
+                        "recovered_amount": txn.amount,
+                        "mode": "SIMULATION_MODE",
+                        "action": policy_res.action
+                    })
+                )
+                db.add(aud_succ)
+
+            else:
+                # Real TEST_MODE execution
+                txn.retry_count += 1
+                payments = await razorpay_service.fetch_order_payments(order_result.get("id", ""))
+                is_captured = any(p.get("status") == "captured" for p in payments)
+
+                if is_captured:
+                    captured_pay = next(p for p in payments if p.get("status") == "captured")
+                    txn.status = "RECOVERED"
+                    txn.razorpay_payment_id = captured_pay.get("id")
+                    execution_result["status"] = "SUCCESS"
+                    execution_result["recovered_amount"] = txn.amount
+                    execution_result["message"] = f"Razorpay Test payment verified and captured ({captured_pay.get('id')}). Revenue captured."
+
+                    action_rec = RecoveryAction(
+                        id=f"act_{uuid.uuid4().hex[:12]}",
+                        transaction_id=txn.id,
+                        action_type=policy_res.action,
+                        status="SUCCESS",
+                        ai_diagnosis=ai_analysis.diagnosis,
+                        ai_probability=ai_analysis.recovery_probability,
+                        ai_risk_level=ai_analysis.risk_level,
+                        ai_reasoning=ai_analysis.reason,
+                        policy_allowed=True,
+                        policy_reasons_json=json.dumps(policy_res.reasons),
+                        requires_human_approval=False,
+                        recovered_amount=txn.amount,
+                        execution_details_json=json.dumps({"payment_id": captured_pay.get("id"), "status": "captured"}),
+                        mode="TEST_MODE",
+                        created_at=now + timedelta(milliseconds=500),
+                        executed_at=now + timedelta(milliseconds=700)
+                    )
+                    db.add(action_rec)
+
+                    aud_succ = AuditEvent(
+                        id=f"aud_{uuid.uuid4().hex[:12]}",
+                        timestamp=now + timedelta(milliseconds=700),
+                        transaction_id=txn.id,
+                        event_type="PAYMENT_RECOVERED",
+                        actor="RAZORPAY_GATEWAY",
+                        decision="REVENUE_RECOVERED",
+                        details_json=json.dumps({
+                            "recovered_amount": txn.amount,
+                            "payment_id": captured_pay.get("id"),
+                            "mode": "TEST_MODE",
+                            "action": policy_res.action
+                        })
+                    )
+                    db.add(aud_succ)
+
+                else:
+                    txn.status = "RECOVERY_PENDING"
+                    execution_result["status"] = "PENDING"
+                    execution_result["recovered_amount"] = 0.0
+                    execution_result["message"] = f"Razorpay Test Order created ({order_result.get('id')}). Awaiting customer test payment authorization."
+
+                    action_rec = RecoveryAction(
+                        id=f"act_{uuid.uuid4().hex[:12]}",
+                        transaction_id=txn.id,
+                        action_type=policy_res.action,
+                        status="PENDING",
+                        ai_diagnosis=ai_analysis.diagnosis,
+                        ai_probability=ai_analysis.recovery_probability,
+                        ai_risk_level=ai_analysis.risk_level,
+                        ai_reasoning=ai_analysis.reason,
+                        policy_allowed=True,
+                        policy_reasons_json=json.dumps(policy_res.reasons),
+                        requires_human_approval=False,
+                        recovered_amount=0.0,
+                        execution_details_json=json.dumps({"order_id": order_result.get("id"), "mode": "TEST_MODE"}),
+                        mode="TEST_MODE",
+                        created_at=now + timedelta(milliseconds=500)
+                    )
+                    db.add(action_rec)
 
         elif policy_res.action == "PAYMENT_LINK":
             # Generate payment link via Razorpay
@@ -399,11 +483,13 @@ async def run_scenario(request: DemoScenarioRequest, db: Session = Depends(get_d
                 customer_name=customer.name,
                 customer_email=customer.email,
                 customer_phone=customer.phone,
-                description=f"Recovered Order {order_result.get('id')}"
+                description=f"Recovered Order {order_result.get('id')}",
+                force_mode=exec_mode
             )
             txn.status = "RECOVERY_PENDING"
             txn.razorpay_payment_link = plink.get("short_url")
-            execution_result["status"] = "SUCCESS"
+            execution_result["status"] = "PENDING"
+            execution_result["recovered_amount"] = 0.0
             execution_result["razorpay_payment_link"] = plink.get("short_url")
             execution_result["message"] = f"Generated Razorpay Payment Link ({plink.get('short_url')}). Sent to customer {customer.email}."
 
@@ -411,7 +497,7 @@ async def run_scenario(request: DemoScenarioRequest, db: Session = Depends(get_d
                 id=f"act_{uuid.uuid4().hex[:12]}",
                 transaction_id=txn.id,
                 action_type="PAYMENT_LINK",
-                status="SUCCESS",
+                status="PENDING",
                 ai_diagnosis=ai_analysis.diagnosis,
                 ai_probability=ai_analysis.recovery_probability,
                 ai_risk_level=ai_analysis.risk_level,
@@ -421,7 +507,7 @@ async def run_scenario(request: DemoScenarioRequest, db: Session = Depends(get_d
                 requires_human_approval=False,
                 recovered_amount=0.0,
                 execution_details_json=json.dumps(plink),
-                mode=order_result.get("mode", "TEST_MODE"),
+                mode=exec_mode,
                 created_at=now + timedelta(milliseconds=500),
                 executed_at=now + timedelta(milliseconds=700)
             )
@@ -434,7 +520,7 @@ async def run_scenario(request: DemoScenarioRequest, db: Session = Depends(get_d
                 event_type="RECOVERY_ACTION_TRIGGERED",
                 actor="RAZORPAY_GATEWAY",
                 decision="PAYMENT_LINK_DISPATCHED",
-                details_json=json.dumps({"short_url": plink.get("short_url"), "mode": plink.get("mode")})
+                details_json=json.dumps({"short_url": plink.get("short_url"), "mode": exec_mode})
             )
             db.add(aud_link)
 
@@ -452,7 +538,7 @@ async def run_scenario(request: DemoScenarioRequest, db: Session = Depends(get_d
         "policy_decision": policy_res.model_dump(),
         "recovery_result": execution_result,
         "audit_timeline": [e.to_dict() for e in events],
-        "mode": order_result.get("mode", "TEST_MODE")
+        "mode": exec_mode
     }
 
 @router.post("/payment")
@@ -469,3 +555,4 @@ async def create_demo_payment(request: DemoPaymentRequest, db: Session = Depends
         spec_key = "insufficient_funds"
 
     return await run_scenario(DemoScenarioRequest(scenario=spec_key), db=db)
+

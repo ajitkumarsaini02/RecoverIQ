@@ -16,10 +16,12 @@ class Settings(BaseSettings):
     # Razorpay Test Mode
     RAZORPAY_KEY_ID: str = ""
     RAZORPAY_KEY_SECRET: str = ""
+    RAZORPAY_WEBHOOK_SECRET: str = ""
     
     # AI Engine
     LLM_PROVIDER: str = "gemini"
     GEMINI_API_KEY: str = ""
+    GEMINI_MODEL: str = "gemini-1.5-flash"
     OPENAI_API_KEY: str = ""
 
     @property
@@ -37,14 +39,19 @@ class Settings(BaseSettings):
 
     @property
     def is_razorpay_configured(self) -> bool:
-        return bool(self.RAZORPAY_KEY_ID and self.RAZORPAY_KEY_SECRET and not self.RAZORPAY_KEY_ID.startswith("placeholder"))
+        return bool(
+            self.RAZORPAY_KEY_ID 
+            and self.RAZORPAY_KEY_SECRET 
+            and not self.RAZORPAY_KEY_ID.startswith("rzp_test_placeholder")
+            and not self.RAZORPAY_KEY_SECRET.startswith("placeholder")
+        )
 
     @property
     def is_ai_configured(self) -> bool:
         if self.LLM_PROVIDER == "gemini":
-            return bool(self.GEMINI_API_KEY)
+            return bool(self.GEMINI_API_KEY and not self.GEMINI_API_KEY.startswith("placeholder") and not self.GEMINI_API_KEY.startswith("AIzaSy_placeholder"))
         elif self.LLM_PROVIDER == "openai":
-            return bool(self.OPENAI_API_KEY)
+            return bool(self.OPENAI_API_KEY and not self.OPENAI_API_KEY.startswith("sk-placeholder"))
         return False
 
 settings = Settings()

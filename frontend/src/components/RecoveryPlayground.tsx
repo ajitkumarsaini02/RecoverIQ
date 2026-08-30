@@ -98,6 +98,7 @@ const PRESET_SCENARIOS: PresetScenarioCard[] = [
 
 export const RecoveryPlayground: React.FC = () => {
   const [selectedScenarioId, setSelectedScenarioId] = useState<string>('temporary_upi_failure');
+  const [executionMode, setExecutionMode] = useState<'TEST_MODE' | 'SIMULATION_MODE'>('TEST_MODE');
   const [running, setRunning] = useState<boolean>(false);
   const [result, setResult] = useState<DemoScenarioResult | null>(null);
   const [stepIndex, setStepIndex] = useState<number>(0);
@@ -108,8 +109,8 @@ export const RecoveryPlayground: React.FC = () => {
   const handleRunScenario = async () => {
     console.log("[RecoverIQ] Run Scenario clicked");
     console.log("[RecoverIQ] Selected scenario:", selectedScenarioId);
+    console.log("[RecoverIQ] Execution mode:", executionMode);
     console.log("[RecoverIQ] API URL:", API_BASE);
-    console.log("[RecoverIQ] Sending scenario request");
 
     try {
       setRunning(true);
@@ -118,7 +119,7 @@ export const RecoveryPlayground: React.FC = () => {
       setStepIndex(1); // Step 1: Payment Attempt
 
       const scenarioToRun = selectedScenarioId || 'temporary_upi_failure';
-      const data = await runDemoScenario(scenarioToRun);
+      const data = await runDemoScenario(scenarioToRun, executionMode);
       console.log("[RecoverIQ] Scenario execution successful:", data);
       
       // Animate through all 7 pipeline steps smoothly for execution visibility
@@ -161,15 +162,43 @@ export const RecoveryPlayground: React.FC = () => {
             </p>
           </div>
 
-          <button
-            type="button"
-            onClick={handleRunScenario}
-            disabled={running}
-            className="px-6 py-3.5 rounded-xl bg-gradient-to-r from-brand-600 to-emerald-500 hover:from-brand-500 hover:to-emerald-400 text-white font-bold text-sm shadow-xl shadow-brand-500/25 flex items-center justify-center gap-2.5 transition-all transform active:scale-95 disabled:opacity-50 shrink-0 cursor-pointer"
-          >
-            <Play className={`h-4 w-4 fill-white ${running ? 'animate-spin' : ''}`} />
-            <span>{running ? 'Executing Recovery Pipeline...' : 'Run Scenario'}</span>
-          </button>
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 shrink-0">
+            {/* Mode Switcher */}
+            <div className="flex p-1 rounded-xl bg-surface-base border border-surface-border">
+              <button
+                type="button"
+                onClick={() => setExecutionMode('TEST_MODE')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-mono font-semibold transition-all cursor-pointer ${
+                  executionMode === 'TEST_MODE'
+                    ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 shadow-sm'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                🟢 Razorpay Test Mode
+              </button>
+              <button
+                type="button"
+                onClick={() => setExecutionMode('SIMULATION_MODE')}
+                className={`px-3 py-1.5 rounded-lg text-xs font-mono font-semibold transition-all cursor-pointer ${
+                  executionMode === 'SIMULATION_MODE'
+                    ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40 shadow-sm'
+                    : 'text-slate-400 hover:text-slate-200'
+                }`}
+              >
+                🟣 Simulation Sandbox
+              </button>
+            </div>
+
+            <button
+              type="button"
+              onClick={handleRunScenario}
+              disabled={running}
+              className="px-6 py-3 rounded-xl bg-gradient-to-r from-brand-600 to-emerald-500 hover:from-brand-500 hover:to-emerald-400 text-white font-bold text-sm shadow-xl shadow-brand-500/25 flex items-center justify-center gap-2.5 transition-all transform active:scale-95 disabled:opacity-50 shrink-0 cursor-pointer"
+            >
+              <Play className={`h-4 w-4 fill-white ${running ? 'animate-spin' : ''}`} />
+              <span>{running ? 'Executing Recovery Pipeline...' : 'Run Scenario'}</span>
+            </button>
+          </div>
         </div>
       </div>
 
@@ -229,9 +258,16 @@ export const RecoveryPlayground: React.FC = () => {
             <Activity className="h-5 w-5 text-brand-400" />
             <h3 className="text-base font-bold text-white">7-Step Visual Recovery Pipeline</h3>
           </div>
-          <span className="text-xs font-mono text-slate-400">
-            Selected: <strong className="text-white">{selectedScenario.title}</strong>
-          </span>
+          <div className="flex items-center gap-2 text-xs font-mono">
+            <span className="text-slate-400">Mode:</span>
+            <span className={`px-2 py-0.5 rounded font-semibold border ${
+              executionMode === 'TEST_MODE'
+                ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+                : 'bg-purple-500/20 text-purple-300 border-purple-500/40'
+            }`}>
+              {executionMode === 'TEST_MODE' ? 'Razorpay Test Mode' : 'Simulation Sandbox'}
+            </span>
+          </div>
         </div>
 
         {/* 7 Stepper Progress Nodes */}
@@ -242,7 +278,7 @@ export const RecoveryPlayground: React.FC = () => {
             { step: 3, label: '3. AI ANALYSIS', desc: 'Context & History' },
             { step: 4, label: '4. RECOVERY DECISION', desc: 'Probability Est.' },
             { step: 5, label: '5. POLICY CHECK', desc: 'Safety Guardrails' },
-            { step: 6, label: '6. ACTION', desc: 'Razorpay Execution' },
+            { step: 6, label: '6. ACTION', desc: executionMode === 'TEST_MODE' ? 'Razorpay API' : 'Simulated Action' },
             { step: 7, label: '7. RESULT', desc: 'Revenue Outcome' },
           ].map((st) => {
             const isCompleted = stepIndex >= st.step;
@@ -301,7 +337,7 @@ export const RecoveryPlayground: React.FC = () => {
                 </div>
 
                 <div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
                     <span className="text-xs font-mono font-semibold text-slate-400 uppercase tracking-wider">
                       Execution Outcome:
                     </span>
@@ -315,14 +351,19 @@ export const RecoveryPlayground: React.FC = () => {
                       {result.recovery_result.status}
                     </span>
                     <span className={`text-[10px] font-mono px-2 py-0.5 rounded border font-semibold ${
-                      result.mode.includes('REAL TEST MODE')
+                      result.mode === 'TEST_MODE'
                         ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
-                        : 'bg-blue-500/20 text-blue-300 border-blue-500/40'
+                        : 'bg-purple-500/20 text-purple-300 border-purple-500/40'
                     }`}>
-                      Razorpay: {result.mode}
+                      {result.mode === 'TEST_MODE' ? 'Razorpay Test Mode' : 'Simulation Sandbox'}
                     </span>
+                    {result.ai_analysis.model_used && (
+                      <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-blue-500/10 text-blue-300 border border-blue-500/30">
+                        {result.ai_analysis.model_used}
+                      </span>
+                    )}
                   </div>
-                  <p className="text-sm font-medium text-slate-200 mt-1">
+                  <p className="text-sm font-medium text-slate-200 mt-1.5">
                     {result.recovery_result.message}
                   </p>
                 </div>
@@ -330,7 +371,9 @@ export const RecoveryPlayground: React.FC = () => {
 
               {result.recovery_result.recovered_amount > 0 && (
                 <div className="p-3 rounded-xl bg-surface-base border border-emerald-500/30 text-right shrink-0">
-                  <span className="text-[11px] font-mono text-slate-400 uppercase block">Revenue Recovered</span>
+                  <span className="text-[11px] font-mono text-slate-400 uppercase block">
+                    {result.mode === 'TEST_MODE' ? 'Revenue Captured' : 'Revenue Recovered (Simulated)'}
+                  </span>
                   <span className="text-2xl font-extrabold text-emerald-400">
                     +₹{result.recovery_result.recovered_amount.toLocaleString('en-IN')}
                   </span>
