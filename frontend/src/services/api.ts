@@ -8,15 +8,19 @@ import {
 } from '../types';
 
 // Resolve API base URL dynamically:
-// In production (e.g. Vercel), uses VITE_API_URL if defined (e.g. "https://recoveriq-backend.onrender.com/api" or "https://recoveriq-backend.onrender.com")
-// In local development, falls back to '/api' for Vite reverse proxy
+// 1. Uses explicit VITE_API_URL environment variable if defined
+// 2. In production (e.g. Vercel deployment), defaults to live Render backend
+// 3. In local development (localhost), uses '/api' with Vite reverse proxy
 const getApiBase = (): string => {
   const envUrl = (import.meta as any).env?.VITE_API_URL;
-  if (!envUrl || envUrl.trim() === '') {
-    return '/api';
+  if (envUrl && envUrl.trim() !== '') {
+    const cleanUrl = envUrl.trim().replace(/\/+$/, '');
+    return cleanUrl.endsWith('/api') ? cleanUrl : `${cleanUrl}/api`;
   }
-  const cleanUrl = envUrl.trim().replace(/\/+$/, '');
-  return cleanUrl.endsWith('/api') ? cleanUrl : `${cleanUrl}/api`;
+  if (typeof window !== 'undefined' && window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+    return 'https://recoveriq-izgf.onrender.com/api';
+  }
+  return '/api';
 };
 
 export const API_BASE = getApiBase();
