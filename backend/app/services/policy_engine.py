@@ -40,6 +40,7 @@ class DeterministicPolicyEngine:
     HIGH_VALUE_THRESHOLD = 20000.0 # INR
     LOW_PROBABILITY_THRESHOLD = 0.25 # 25% minimum floor
     COOLDOWN_SECONDS = 30 # seconds
+    VALID_ACTIONS = {"RETRY_PAYMENT", "PAYMENT_LINK", "ALTERNATIVE_PAYMENT_METHOD", "REMINDER", "HUMAN_ESCALATION", "STOP"}
 
     def evaluate(self, transaction: Transaction, recommendation: AIAgentRecommendation) -> PolicyEvaluationResult:
         rules_evaluated: List[PolicyRuleResult] = []
@@ -47,6 +48,19 @@ class DeterministicPolicyEngine:
         action = recommendation.recommended_action
         requires_human_approval = recommendation.requires_human_approval
         allowed = True
+
+        # Pre-check: Invalid / Unrecognized Action -> Safe STOP
+        if action not in self.VALID_ACTIONS:
+            allowed = False
+            action = "STOP"
+            reason_msg = f"Invalid or unrecognized recommended action '{recommendation.recommended_action}'. Policy overridden to safe STOP."
+            reasons.append(reason_msg)
+            rules_evaluated.append(PolicyRuleResult(
+                rule_id="RULE_VALID_ACTION",
+                description="Enforce valid policy recovery action enumeration",
+                passed=False,
+                reason=reason_msg
+            ))
 
         # Rule 1: Maximum 2 Automatic Retry Attempts (Ceiling)
         if action == "RETRY_PAYMENT" and (transaction.retry_count or 0) >= self.MAX_RETRIES:

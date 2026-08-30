@@ -22,16 +22,28 @@ class RecoveryExecutionResponse(BaseModel):
     timestamp: str
     mode: str = "DEMO_MODE"
     message: str
+    razorpay_order_id: Optional[str] = None
+    razorpay_payment_link: Optional[str] = None
     details: Dict[str, Any] = Field(default_factory=dict)
     ai_diagnosis: Optional[str] = None
     ai_probability: Optional[float] = None
     policy_reason: Optional[str] = None
 
+import asyncio
+
 class RecoveryExecutionService:
     """
     Execution engine that safely executes policy-authorized recovery actions:
     Failed Payment -> AI Analysis -> Policy Validation -> Recovery Action -> Result.
+    Features robust idempotency protection against duplicate concurrent and sequential executions.
     """
+    def __init__(self):
+        self._locks: Dict[str, asyncio.Lock] = {}
+
+    def _get_lock(self, transaction_id: str) -> asyncio.Lock:
+        if transaction_id not in self._locks:
+            self._locks[transaction_id] = asyncio.Lock()
+        return self._locks[transaction_id]
 
     async def execute_recovery(
         self, 
@@ -39,36 +51,84 @@ class RecoveryExecutionService:
         transaction: Transaction,
         mode: Optional[str] = None
     ) -> RecoveryExecutionResponse:
-        now = datetime.now(timezone.utc)
-        now_iso = now.isoformat()
+        lock = self._get_lock(transaction.id)
+        async with lock:
+            now = datetime.now(timezone.utc)
+            now_iso = now.isoformat()
 
-        # Idempotency Guard 1: Already recovered
-        if transaction.status == "RECOVERED":
-            return RecoveryExecutionResponse(
-                transaction_id=transaction.id,
-                action="NONE",
-                status="SUCCESS",
-                amount_recovered=transaction.amount,
-                timestamp=now_iso,
-                mode=mode or razorpay_service.current_mode_label,
-                message="Transaction has already been successfully recovered (Idempotent response).",
-                details={"already_recovered": True, "idempotent": True}
-            )
+            # Refresh transaction from DB
+            db.refresh(transaction)
 
-        # Idempotency Guard 2: Prevent rapid back-to-back click race condition (within 5 seconds)
-        if transaction.last_recovery_attempt_at:
-            delta_seconds = (now - transaction.last_recovery_attempt_at.replace(tzinfo=timezone.utc)).total_seconds()
-            if delta_seconds < 5.0 and transaction.status in ["RECOVERY_PENDING", "APPROVAL_REQUIRED"]:
+            # Idempotency Guard 1: Already recovered
+            if transaction.status == "RECOVERED":
                 return RecoveryExecutionResponse(
                     transaction_id=transaction.id,
-                    action="COOLDOWN",
+                    action="NONE",
+                    status="SUCCESS",
+                    amount_recovered=transaction.amount,
+                    timestamp=now_iso,
+                    mode=mode or razorpay_service.current_mode_label,
+                    message="Transaction has already been successfully recovered (Idempotent response).",
+                    razorpay_order_id=transaction.razorpay_order_id,
+                    razorpay_payment_link=transaction.razorpay_payment_link,
+                    details={"already_recovered": True, "idempotent": True}
+                )
+
+            # Idempotency Guard 2: Already pending human approval
+            existing_approval = db.query(RecoveryAction).filter(
+                RecoveryAction.transaction_id == transaction.id,
+                RecoveryAction.status == "PENDING_APPROVAL"
+            ).first()
+            if existing_approval or transaction.status == "APPROVAL_REQUIRED":
+                return RecoveryExecutionResponse(
+                    transaction_id=transaction.id,
+                    action=existing_approval.action_type if existing_approval else "APPROVAL_REQUIRED",
+                    status="REQUIRES_APPROVAL",
+                    amount_recovered=0.0,
+                    timestamp=now_iso,
+                    mode=existing_approval.mode if existing_approval else (mode or razorpay_service.current_mode_label),
+                    message="A recovery action is already pending human approval for this transaction.",
+                    details={"action_id": existing_approval.id if existing_approval else None, "idempotent": True},
+                    ai_diagnosis=existing_approval.ai_diagnosis if existing_approval else None,
+                    ai_probability=existing_approval.ai_probability if existing_approval else None
+                )
+
+            # Idempotency Guard 3: Already in RECOVERY_PENDING with active order or payment link
+            if transaction.status == "RECOVERY_PENDING" and (transaction.razorpay_order_id or transaction.razorpay_payment_link):
+                existing_act = db.query(RecoveryAction).filter(
+                    RecoveryAction.transaction_id == transaction.id,
+                    RecoveryAction.status == "PENDING"
+                ).order_by(RecoveryAction.created_at.desc()).first()
+
+                return RecoveryExecutionResponse(
+                    transaction_id=transaction.id,
+                    action=existing_act.action_type if existing_act else "RETRY_PAYMENT",
                     status="PENDING",
                     amount_recovered=0.0,
                     timestamp=now_iso,
-                    mode=mode or razorpay_service.current_mode_label,
-                    message="Recovery is already being processed. Please wait for previous action to finalize.",
-                    details={"in_progress": True, "cooldown_remaining": round(5.0 - delta_seconds, 1)}
+                    mode=existing_act.mode if existing_act else (mode or razorpay_service.current_mode_label),
+                    message=f"Recovery is already actively in progress for this transaction. Awaiting authorization or payment verification.",
+                    razorpay_order_id=transaction.razorpay_order_id,
+                    razorpay_payment_link=transaction.razorpay_payment_link,
+                    details={"in_progress": True, "idempotent": True},
+                    ai_diagnosis=existing_act.ai_diagnosis if existing_act else None,
+                    ai_probability=existing_act.ai_probability if existing_act else None
                 )
+
+            # Idempotency Guard 4: Prevent rapid back-to-back click race condition (within 5 seconds)
+            if transaction.last_recovery_attempt_at:
+                delta_seconds = (now - transaction.last_recovery_attempt_at.replace(tzinfo=timezone.utc)).total_seconds()
+                if delta_seconds < 5.0 and transaction.status in ["RECOVERY_PENDING", "APPROVAL_REQUIRED"]:
+                    return RecoveryExecutionResponse(
+                        transaction_id=transaction.id,
+                        action="COOLDOWN",
+                        status="PENDING",
+                        amount_recovered=0.0,
+                        timestamp=now_iso,
+                        mode=mode or razorpay_service.current_mode_label,
+                        message="Recovery is already being processed. Please wait for previous action to finalize.",
+                        details={"in_progress": True, "cooldown_remaining": round(5.0 - delta_seconds, 1)}
+                    )
 
         customer = transaction.customer
         current_mode = mode or ("TEST_MODE" if razorpay_service.is_live_test_mode else "SIMULATION_MODE")
@@ -234,9 +294,53 @@ class RecoveryExecutionService:
                     force_mode=current_mode
                 )
 
+                order_id = order_data.get("id")
+                if current_mode == "TEST_MODE" and (not order_id or order_data.get("status") == "failed"):
+                    error_msg = order_data.get("error", "Razorpay Test Order creation failed: No order ID returned")
+                    logger.error(f"Razorpay Test Order creation failed: {error_msg}")
+                    transaction.status = "FAILED"
+                    transaction.retry_count += 1
+                    transaction.updated_at = now
+
+                    action_record = RecoveryAction(
+                        id=f"act_{uuid.uuid4().hex[:12]}",
+                        transaction_id=transaction.id,
+                        action_type=action_type,
+                        status="FAILED",
+                        ai_diagnosis=ai_recommendation.diagnosis,
+                        ai_probability=ai_recommendation.recovery_probability,
+                        ai_risk_level=ai_recommendation.risk_level,
+                        ai_reasoning=ai_recommendation.reason,
+                        policy_allowed=True,
+                        policy_reasons_json=json.dumps(policy_res.reasons),
+                        requires_human_approval=False,
+                        recovered_amount=0.0,
+                        error_message=str(error_msg),
+                        execution_details_json=json.dumps(order_data),
+                        mode="TEST_MODE",
+                        created_at=now,
+                        executed_at=now
+                    )
+                    db.add(action_record)
+                    db.commit()
+
+                    return RecoveryExecutionResponse(
+                        transaction_id=transaction.id,
+                        action=action_type,
+                        status="FAILED",
+                        amount_recovered=0.0,
+                        timestamp=now_iso,
+                        mode="TEST_MODE",
+                        message=f"Razorpay Test Order creation failed: {error_msg}",
+                        details={"order_created": False, "verified": False, "error": str(error_msg)},
+                        ai_diagnosis=ai_recommendation.diagnosis,
+                        ai_probability=ai_recommendation.recovery_probability,
+                        policy_reason=policy_res.reason
+                    )
+
                 transaction.retry_count += 1
                 transaction.last_recovery_attempt_at = now
-                transaction.razorpay_order_id = order_data.get("id")
+                transaction.razorpay_order_id = order_id
                 transaction.updated_at = now
 
                 # In SIMULATION_MODE: simulate capture
@@ -259,7 +363,7 @@ class RecoveryExecutionService:
                         policy_reasons_json=json.dumps(policy_res.reasons),
                         requires_human_approval=False,
                         recovered_amount=recovered_amount,
-                        execution_details_json=json.dumps({"order_id": order_data.get("id"), "payment_id": sim_pay_id, "mode": "SIMULATION_MODE"}),
+                        execution_details_json=json.dumps({"order_id": order_id, "payment_id": sim_pay_id, "mode": "SIMULATION_MODE"}),
                         mode="SIMULATION_MODE",
                         created_at=now,
                         executed_at=now
@@ -282,8 +386,8 @@ class RecoveryExecutionService:
                         amount_recovered=recovered_amount,
                         timestamp=now_iso,
                         mode="SIMULATION_MODE",
-                        message=f"Simulated payment retry executed successfully. Revenue recovered: ₹{transaction.amount:,.0f}",
-                        details={"order_id": order_data.get("id"), "payment_id": sim_pay_id, "simulated": True},
+                        message=f"[SIMULATED RECOVERY] Simulated payment retry executed. ₹{transaction.amount:,.0f} recovered (Simulation Sandbox).",
+                        details={"order_id": order_id, "payment_id": sim_pay_id, "simulated": True},
                         ai_diagnosis=ai_recommendation.diagnosis,
                         ai_probability=ai_recommendation.recovery_probability,
                         policy_reason=policy_res.reason
@@ -291,7 +395,7 @@ class RecoveryExecutionService:
 
                 # In TEST_MODE: Real Razorpay Test Order created.
                 # Check if payment was immediately verified or remains pending customer checkout.
-                payments = await razorpay_service.fetch_order_payments(order_data.get("id", ""))
+                payments = await razorpay_service.fetch_order_payments(order_id or "")
                 is_captured = any(p.get("status") == "captured" for p in payments)
 
                 if is_captured:
@@ -313,7 +417,7 @@ class RecoveryExecutionService:
                         policy_reasons_json=json.dumps(policy_res.reasons),
                         requires_human_approval=False,
                         recovered_amount=recovered_amount,
-                        execution_details_json=json.dumps({"order_id": order_data.get("id"), "payment_id": captured_pay.get("id"), "mode": "TEST_MODE"}),
+                        execution_details_json=json.dumps({"order_id": order_id, "payment_id": captured_pay.get("id"), "mode": "TEST_MODE"}),
                         mode="TEST_MODE",
                         created_at=now,
                         executed_at=now
@@ -337,7 +441,8 @@ class RecoveryExecutionService:
                         timestamp=now_iso,
                         mode="TEST_MODE",
                         message=f"Razorpay Test Payment verified and captured. Revenue captured: ₹{recovered_amount:,.0f}",
-                        details={"order_id": order_data.get("id"), "payment_id": captured_pay.get("id"), "verified": True},
+                        razorpay_order_id=order_id,
+                        details={"order_id": order_id, "payment_id": captured_pay.get("id"), "verified": True},
                         ai_diagnosis=ai_recommendation.diagnosis,
                         ai_probability=ai_recommendation.recovery_probability,
                         policy_reason=policy_res.reason
@@ -360,7 +465,7 @@ class RecoveryExecutionService:
                         policy_reasons_json=json.dumps(policy_res.reasons),
                         requires_human_approval=False,
                         recovered_amount=0.0,
-                        execution_details_json=json.dumps({"order_id": order_data.get("id"), "mode": "TEST_MODE", "status": "order_created"}),
+                        execution_details_json=json.dumps({"order_id": order_id, "mode": "TEST_MODE", "status": "order_created"}),
                         mode="TEST_MODE",
                         created_at=now
                     )
@@ -374,8 +479,9 @@ class RecoveryExecutionService:
                         amount_recovered=0.0,
                         timestamp=now_iso,
                         mode="TEST_MODE",
-                        message=f"Razorpay Test Order created ({order_data.get('id')}). Awaiting payment verification or webhook.",
-                        details={"order_id": order_data.get("id"), "verified": False, "pending_payment": True},
+                        message=f"Razorpay Test Order created ({order_id}). Awaiting payment verification or webhook.",
+                        razorpay_order_id=order_id,
+                        details={"order_id": order_id, "verified": False, "pending_payment": True},
                         ai_diagnosis=ai_recommendation.diagnosis,
                         ai_probability=ai_recommendation.recovery_probability,
                         policy_reason=policy_res.reason
@@ -474,6 +580,7 @@ class RecoveryExecutionService:
                 timestamp=now_iso,
                 mode=current_mode,
                 message=f"Razorpay Payment Link generated ({plink.get('short_url')}). Awaiting customer payment.",
+                razorpay_payment_link=plink.get("short_url"),
                 details={"payment_link": plink.get("short_url"), "link_id": plink.get("id"), "verified": False},
                 ai_diagnosis=ai_recommendation.diagnosis,
                 ai_probability=ai_recommendation.recovery_probability,

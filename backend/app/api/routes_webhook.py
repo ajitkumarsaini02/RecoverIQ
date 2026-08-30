@@ -54,11 +54,13 @@ async def handle_razorpay_webhook(
 
     logger.info(f"Processing Razorpay webhook event: {event_type}")
 
-    if event_type == "payment.captured":
+    if event_type in ["payment.captured", "order.paid"]:
         payment_obj = event_data.get("payment", {}).get("entity", {})
-        order_id = payment_obj.get("order_id")
+        order_obj = event_data.get("order", {}).get("entity", {})
+
+        order_id = payment_obj.get("order_id") or order_obj.get("id")
         payment_id = payment_obj.get("id")
-        amount = float(payment_obj.get("amount", 0)) / 100.0
+        amount = float(payment_obj.get("amount", 0) or order_obj.get("amount_paid", 0) or order_obj.get("amount", 0)) / 100.0
 
         # Find matching transaction by order_id or notes
         txn = None
@@ -66,13 +68,23 @@ async def handle_razorpay_webhook(
             txn = db.query(Transaction).filter(Transaction.razorpay_order_id == order_id).first()
         if not txn and payment_obj.get("notes", {}).get("transaction_id"):
             txn = db.query(Transaction).filter(Transaction.id == payment_obj["notes"]["transaction_id"]).first()
+        if not txn and order_obj.get("notes", {}).get("transaction_id"):
+            txn = db.query(Transaction).filter(Transaction.id == order_obj["notes"]["transaction_id"]).first()
 
         if txn:
-            # Idempotency check
+            # Idempotency check: only recover if not already recovered
             if txn.status != "RECOVERED":
                 txn.status = "RECOVERED"
-                txn.razorpay_payment_id = payment_id
+                if payment_id:
+                    txn.razorpay_payment_id = payment_id
                 txn.updated_at = now
+
+                # Update recent recovery action
+                act = db.query(RecoveryAction).filter(RecoveryAction.transaction_id == txn.id).order_by(RecoveryAction.created_at.desc()).first()
+                if act and act.status != "SUCCESS":
+                    act.status = "SUCCESS"
+                    act.recovered_amount = txn.amount
+                    act.executed_at = now
 
                 audit_service.log_webhook_received(
                     db=db,
@@ -90,11 +102,14 @@ async def handle_razorpay_webhook(
                     mode="TEST_MODE"
                 )
                 db.commit()
-                logger.info(f"Transaction {txn.id} marked RECOVERED via webhook payment.captured.")
+                logger.info(f"Transaction {txn.id} marked RECOVERED via webhook {event_type}.")
+                return {"status": "success", "event": event_type, "transaction_id": txn.id, "recovered": True}
             else:
                 logger.info(f"Transaction {txn.id} already marked RECOVERED. Duplicate webhook ignored.")
+                return {"status": "ignored", "event": event_type, "transaction_id": txn.id, "reason": "Already recovered"}
         else:
-            logger.warning(f"No local transaction found for captured Razorpay order {order_id} / payment {payment_id}")
+            logger.warning(f"No local transaction found for Razorpay order {order_id} / payment {payment_id}")
+            return {"status": "ignored", "event": event_type, "reason": "Transaction not found"}
 
     elif event_type == "payment_link.paid":
         plink_obj = event_data.get("payment_link", {}).get("entity", {})
@@ -106,30 +121,48 @@ async def handle_razorpay_webhook(
         txn = None
         if plink_obj.get("short_url"):
             txn = db.query(Transaction).filter(Transaction.razorpay_payment_link == plink_obj["short_url"]).first()
+        if not txn and plink_id:
+            txn = db.query(Transaction).filter(Transaction.razorpay_payment_link.contains(plink_id)).first()
         if not txn and plink_obj.get("notes", {}).get("transaction_id"):
             txn = db.query(Transaction).filter(Transaction.id == plink_obj["notes"]["transaction_id"]).first()
 
-        if txn and txn.status != "RECOVERED":
-            txn.status = "RECOVERED"
-            txn.razorpay_payment_id = payment_id
-            txn.updated_at = now
+        if txn:
+            if txn.status != "RECOVERED":
+                txn.status = "RECOVERED"
+                if payment_id:
+                    txn.razorpay_payment_id = payment_id
+                txn.updated_at = now
 
-            audit_service.log_webhook_received(
-                db=db,
-                transaction_id=txn.id,
-                event=event_type,
-                payment_id=payment_id,
-                order_id=None
-            )
+                # Update recent recovery action
+                act = db.query(RecoveryAction).filter(RecoveryAction.transaction_id == txn.id).order_by(RecoveryAction.created_at.desc()).first()
+                if act and act.status != "SUCCESS":
+                    act.status = "SUCCESS"
+                    act.recovered_amount = txn.amount
+                    act.executed_at = now
 
-            audit_service.log_payment_recovered(
-                db=db,
-                transaction_id=txn.id,
-                amount_recovered=amount or txn.amount,
-                payment_id=payment_id,
-                mode="TEST_MODE"
-            )
-            db.commit()
-            logger.info(f"Transaction {txn.id} marked RECOVERED via payment_link.paid.")
+                audit_service.log_webhook_received(
+                    db=db,
+                    transaction_id=txn.id,
+                    event=event_type,
+                    payment_id=payment_id,
+                    order_id=None
+                )
+
+                audit_service.log_payment_recovered(
+                    db=db,
+                    transaction_id=txn.id,
+                    amount_recovered=amount or txn.amount,
+                    payment_id=payment_id,
+                    mode="TEST_MODE"
+                )
+                db.commit()
+                logger.info(f"Transaction {txn.id} marked RECOVERED via payment_link.paid.")
+                return {"status": "success", "event": event_type, "transaction_id": txn.id, "recovered": True}
+            else:
+                logger.info(f"Transaction {txn.id} already marked RECOVERED. Duplicate webhook ignored.")
+                return {"status": "ignored", "event": event_type, "transaction_id": txn.id, "reason": "Already recovered"}
+        else:
+            logger.warning(f"No local transaction found for payment link {plink_id}")
+            return {"status": "ignored", "event": event_type, "reason": "Transaction not found"}
 
     return {"status": "success", "event": event_type, "timestamp": now.isoformat()}

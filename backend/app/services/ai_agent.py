@@ -164,6 +164,7 @@ class RecoveryAIAgent:
                 }
             ],
             "generationConfig": {
+                "responseMimeType": "application/json",
                 "response_mime_type": "application/json",
                 "temperature": 0.1
             }
@@ -184,9 +185,19 @@ class RecoveryAIAgent:
 
                 content_text = candidates[0].get("content", {}).get("parts", [{}])[0].get("text", "")
                 if not content_text:
+                    logger.warning("Gemini API candidate parts contained empty text.")
                     return None
 
-                parsed = json.loads(content_text)
+                clean_text = content_text.strip()
+                if clean_text.startswith("```json"):
+                    clean_text = clean_text[7:]
+                elif clean_text.startswith("```"):
+                    clean_text = clean_text[3:]
+                if clean_text.endswith("```"):
+                    clean_text = clean_text[:-3]
+                clean_text = clean_text.strip()
+
+                parsed = json.loads(clean_text)
 
                 # Normalize action
                 raw_action = str(parsed.get("recommended_action", "PAYMENT_LINK")).upper()
@@ -295,7 +306,7 @@ class RecoveryAIAgent:
                 risk_level="HIGH",
                 reason=f"Customer {ctx.customer_name} has experienced repeated failures. Additional automated retries pose card block or decline charge risks. Bounded by policy.",
                 requires_human_approval=False,
-                mode="DEMO_FALLBACK",
+                mode="HEURISTIC_FALLBACK",
                 model_used="RecoverIQ Expert Heuristics Engine",
                 fallback_used=True
             )
@@ -311,7 +322,7 @@ class RecoveryAIAgent:
                     risk_level="MEDIUM",
                     reason=f"High transaction value (₹{ctx.amount:,.0f}) with customer {ctx.customer_name} (LTV: ₹{ctx.customer_lifetime_value:,.0f}). Sending a secure Razorpay Payment Link allows white-glove recovery.",
                     requires_human_approval=True,
-                    mode="DEMO_FALLBACK",
+                    mode="HEURISTIC_FALLBACK",
                     model_used="RecoverIQ Expert Heuristics Engine",
                     fallback_used=True
                 )
@@ -323,7 +334,7 @@ class RecoveryAIAgent:
                     risk_level="HIGH",
                     reason=f"Large payment (₹{ctx.amount:,.0f}) declined by bank. Customer has {ctx.previous_failed_payments} past declines. Account manager escalation advised.",
                     requires_human_approval=True,
-                    mode="DEMO_FALLBACK",
+                    mode="HEURISTIC_FALLBACK",
                     model_used="RecoverIQ Expert Heuristics Engine",
                     fallback_used=True
                 )
@@ -338,7 +349,7 @@ class RecoveryAIAgent:
                 risk_level="LOW",
                 reason=f"Customer {ctx.customer_name} has strong historical reliability ({ctx.previous_successful_payments} successful payments, ₹{ctx.customer_lifetime_value:,.0f} LTV). Transient timeout has 91% recovery rate on safe retry.",
                 requires_human_approval=False,
-                mode="DEMO_FALLBACK",
+                mode="HEURISTIC_FALLBACK",
                 model_used="RecoverIQ Expert Heuristics Engine",
                 fallback_used=True
             )
@@ -352,7 +363,7 @@ class RecoveryAIAgent:
                 risk_level="LOW",
                 reason="Temporary network socket timeout during transaction authorization. Automatic retry after backoff is safe and highly effective.",
                 requires_human_approval=False,
-                mode="DEMO_FALLBACK",
+                mode="HEURISTIC_FALLBACK",
                 model_used="RecoverIQ Expert Heuristics Engine",
                 fallback_used=True
             )
@@ -366,7 +377,7 @@ class RecoveryAIAgent:
                 risk_level="MEDIUM",
                 reason=f"Issuing bank declined the transaction. Prompting customer {ctx.customer_name} to switch to an alternative UPI or Netbanking method maximizes conversion.",
                 requires_human_approval=False,
-                mode="DEMO_FALLBACK",
+                mode="HEURISTIC_FALLBACK",
                 model_used="RecoverIQ Expert Heuristics Engine",
                 fallback_used=True
             )
@@ -380,7 +391,7 @@ class RecoveryAIAgent:
                 risk_level="MEDIUM",
                 reason="Customer account lacked sufficient balance at checkout time. Sending a scheduled payment link allows completion after account reload.",
                 requires_human_approval=False,
-                mode="DEMO_FALLBACK",
+                mode="HEURISTIC_FALLBACK",
                 model_used="RecoverIQ Expert Heuristics Engine",
                 fallback_used=True
             )
@@ -394,7 +405,7 @@ class RecoveryAIAgent:
                 risk_level="LOW",
                 reason="The payment method credentials entered were invalid or expired. Prompting customer for alternate method.",
                 requires_human_approval=False,
-                mode="DEMO_FALLBACK",
+                mode="HEURISTIC_FALLBACK",
                 model_used="RecoverIQ Expert Heuristics Engine",
                 fallback_used=True
             )
@@ -407,7 +418,7 @@ class RecoveryAIAgent:
             risk_level="MEDIUM",
             reason="Unclassified payment failure. Standard safe payment link fallback recommended.",
             requires_human_approval=False,
-            mode="DEMO_FALLBACK",
+            mode="HEURISTIC_FALLBACK",
             model_used="RecoverIQ Expert Heuristics Engine",
             fallback_used=True
         )

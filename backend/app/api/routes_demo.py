@@ -364,7 +364,7 @@ async def run_scenario(request: DemoScenarioRequest, db: Session = Depends(get_d
                 txn.razorpay_payment_id = sim_pay_id
                 execution_result["status"] = "SUCCESS"
                 execution_result["recovered_amount"] = txn.amount
-                execution_result["message"] = f"Simulated recovery executed successfully. ₹{txn.amount:,.0f} recovered (Simulation Sandbox)."
+                execution_result["message"] = f"[SIMULATED RECOVERY] Simulated recovery executed successfully. ₹{txn.amount:,.0f} recovered (Simulation Sandbox)."
 
                 action_rec = RecoveryAction(
                     id=f"act_{uuid.uuid4().hex[:12]}",
@@ -404,64 +404,20 @@ async def run_scenario(request: DemoScenarioRequest, db: Session = Depends(get_d
             else:
                 # Real TEST_MODE execution
                 txn.retry_count += 1
-                payments = await razorpay_service.fetch_order_payments(order_result.get("id", ""))
-                is_captured = any(p.get("status") == "captured" for p in payments)
+                order_id = order_result.get("id")
 
-                if is_captured:
-                    captured_pay = next(p for p in payments if p.get("status") == "captured")
-                    txn.status = "RECOVERED"
-                    txn.razorpay_payment_id = captured_pay.get("id")
-                    execution_result["status"] = "SUCCESS"
-                    execution_result["recovered_amount"] = txn.amount
-                    execution_result["message"] = f"Razorpay Test payment verified and captured ({captured_pay.get('id')}). Revenue captured."
-
-                    action_rec = RecoveryAction(
-                        id=f"act_{uuid.uuid4().hex[:12]}",
-                        transaction_id=txn.id,
-                        action_type=policy_res.action,
-                        status="SUCCESS",
-                        ai_diagnosis=ai_analysis.diagnosis,
-                        ai_probability=ai_analysis.recovery_probability,
-                        ai_risk_level=ai_analysis.risk_level,
-                        ai_reasoning=ai_analysis.reason,
-                        policy_allowed=True,
-                        policy_reasons_json=json.dumps(policy_res.reasons),
-                        requires_human_approval=False,
-                        recovered_amount=txn.amount,
-                        execution_details_json=json.dumps({"payment_id": captured_pay.get("id"), "status": "captured"}),
-                        mode="TEST_MODE",
-                        created_at=now + timedelta(milliseconds=500),
-                        executed_at=now + timedelta(milliseconds=700)
-                    )
-                    db.add(action_rec)
-
-                    aud_succ = AuditEvent(
-                        id=f"aud_{uuid.uuid4().hex[:12]}",
-                        timestamp=now + timedelta(milliseconds=700),
-                        transaction_id=txn.id,
-                        event_type="PAYMENT_RECOVERED",
-                        actor="RAZORPAY_GATEWAY",
-                        decision="REVENUE_RECOVERED",
-                        details_json=json.dumps({
-                            "recovered_amount": txn.amount,
-                            "payment_id": captured_pay.get("id"),
-                            "mode": "TEST_MODE",
-                            "action": policy_res.action
-                        })
-                    )
-                    db.add(aud_succ)
-
-                else:
-                    txn.status = "RECOVERY_PENDING"
-                    execution_result["status"] = "PENDING"
+                if not order_id or order_result.get("status") == "failed":
+                    error_msg = order_result.get("error", "Razorpay Test Order creation failed: No order ID returned")
+                    txn.status = "FAILED"
+                    execution_result["status"] = "FAILED"
                     execution_result["recovered_amount"] = 0.0
-                    execution_result["message"] = f"Razorpay Test Order created ({order_result.get('id')}). Awaiting customer test payment authorization."
+                    execution_result["message"] = f"Razorpay Test Order creation failed ({error_msg})."
 
                     action_rec = RecoveryAction(
                         id=f"act_{uuid.uuid4().hex[:12]}",
                         transaction_id=txn.id,
                         action_type=policy_res.action,
-                        status="PENDING",
+                        status="FAILED",
                         ai_diagnosis=ai_analysis.diagnosis,
                         ai_probability=ai_analysis.recovery_probability,
                         ai_risk_level=ai_analysis.risk_level,
@@ -470,11 +426,88 @@ async def run_scenario(request: DemoScenarioRequest, db: Session = Depends(get_d
                         policy_reasons_json=json.dumps(policy_res.reasons),
                         requires_human_approval=False,
                         recovered_amount=0.0,
-                        execution_details_json=json.dumps({"order_id": order_result.get("id"), "mode": "TEST_MODE"}),
+                        error_message=str(error_msg),
+                        execution_details_json=json.dumps(order_result),
                         mode="TEST_MODE",
-                        created_at=now + timedelta(milliseconds=500)
+                        created_at=now + timedelta(milliseconds=500),
+                        executed_at=now + timedelta(milliseconds=700)
                     )
                     db.add(action_rec)
+                else:
+                    txn.razorpay_order_id = order_id
+                    execution_result["razorpay_order_id"] = order_id
+                    payments = await razorpay_service.fetch_order_payments(order_id)
+                    is_captured = any(p.get("status") == "captured" for p in payments)
+
+                    if is_captured:
+                        captured_pay = next(p for p in payments if p.get("status") == "captured")
+                        txn.status = "RECOVERED"
+                        txn.razorpay_payment_id = captured_pay.get("id")
+                        execution_result["status"] = "SUCCESS"
+                        execution_result["recovered_amount"] = txn.amount
+                        execution_result["message"] = f"Razorpay Test payment verified and captured ({captured_pay.get('id')}). Revenue captured."
+
+                        action_rec = RecoveryAction(
+                            id=f"act_{uuid.uuid4().hex[:12]}",
+                            transaction_id=txn.id,
+                            action_type=policy_res.action,
+                            status="SUCCESS",
+                            ai_diagnosis=ai_analysis.diagnosis,
+                            ai_probability=ai_analysis.recovery_probability,
+                            ai_risk_level=ai_analysis.risk_level,
+                            ai_reasoning=ai_analysis.reason,
+                            policy_allowed=True,
+                            policy_reasons_json=json.dumps(policy_res.reasons),
+                            requires_human_approval=False,
+                            recovered_amount=txn.amount,
+                            execution_details_json=json.dumps({"payment_id": captured_pay.get("id"), "order_id": order_id, "status": "captured"}),
+                            mode="TEST_MODE",
+                            created_at=now + timedelta(milliseconds=500),
+                            executed_at=now + timedelta(milliseconds=700)
+                        )
+                        db.add(action_rec)
+
+                        aud_succ = AuditEvent(
+                            id=f"aud_{uuid.uuid4().hex[:12]}",
+                            timestamp=now + timedelta(milliseconds=700),
+                            transaction_id=txn.id,
+                            event_type="PAYMENT_RECOVERED",
+                            actor="RAZORPAY_GATEWAY",
+                            decision="REVENUE_RECOVERED",
+                            details_json=json.dumps({
+                                "recovered_amount": txn.amount,
+                                "payment_id": captured_pay.get("id"),
+                                "order_id": order_id,
+                                "mode": "TEST_MODE",
+                                "action": policy_res.action
+                            })
+                        )
+                        db.add(aud_succ)
+
+                    else:
+                        txn.status = "RECOVERY_PENDING"
+                        execution_result["status"] = "PENDING"
+                        execution_result["recovered_amount"] = 0.0
+                        execution_result["message"] = f"Razorpay Test Order created ({order_id}). Awaiting customer test payment authorization."
+
+                        action_rec = RecoveryAction(
+                            id=f"act_{uuid.uuid4().hex[:12]}",
+                            transaction_id=txn.id,
+                            action_type=policy_res.action,
+                            status="PENDING",
+                            ai_diagnosis=ai_analysis.diagnosis,
+                            ai_probability=ai_analysis.recovery_probability,
+                            ai_risk_level=ai_analysis.risk_level,
+                            ai_reasoning=ai_analysis.reason,
+                            policy_allowed=True,
+                            policy_reasons_json=json.dumps(policy_res.reasons),
+                            requires_human_approval=False,
+                            recovered_amount=0.0,
+                            execution_details_json=json.dumps({"order_id": order_id, "mode": "TEST_MODE"}),
+                            mode="TEST_MODE",
+                            created_at=now + timedelta(milliseconds=500)
+                        )
+                        db.add(action_rec)
 
         elif policy_res.action == "PAYMENT_LINK":
             # Generate payment link via Razorpay
@@ -483,35 +516,65 @@ async def run_scenario(request: DemoScenarioRequest, db: Session = Depends(get_d
                 customer_name=customer.name,
                 customer_email=customer.email,
                 customer_phone=customer.phone,
-                description=f"Recovered Order {order_result.get('id')}",
+                description=f"Recovered Order {order_result.get('id') or txn.id}",
                 force_mode=exec_mode
             )
-            txn.status = "RECOVERY_PENDING"
-            txn.razorpay_payment_link = plink.get("short_url")
-            execution_result["status"] = "PENDING"
-            execution_result["recovered_amount"] = 0.0
-            execution_result["razorpay_payment_link"] = plink.get("short_url")
-            execution_result["message"] = f"Generated Razorpay Payment Link ({plink.get('short_url')}). Sent to customer {customer.email}."
+            plink_url = plink.get("short_url")
 
-            action_rec = RecoveryAction(
-                id=f"act_{uuid.uuid4().hex[:12]}",
-                transaction_id=txn.id,
-                action_type="PAYMENT_LINK",
-                status="PENDING",
-                ai_diagnosis=ai_analysis.diagnosis,
-                ai_probability=ai_analysis.recovery_probability,
-                ai_risk_level=ai_analysis.risk_level,
-                ai_reasoning=ai_analysis.reason,
-                policy_allowed=True,
-                policy_reasons_json=json.dumps(policy_res.reasons),
-                requires_human_approval=False,
-                recovered_amount=0.0,
-                execution_details_json=json.dumps(plink),
-                mode=exec_mode,
-                created_at=now + timedelta(milliseconds=500),
-                executed_at=now + timedelta(milliseconds=700)
-            )
-            db.add(action_rec)
+            if exec_mode == "TEST_MODE" and (not plink_url or plink.get("status") == "failed"):
+                error_msg = plink.get("error", "Razorpay Payment Link creation failed")
+                txn.status = "FAILED"
+                execution_result["status"] = "FAILED"
+                execution_result["recovered_amount"] = 0.0
+                execution_result["message"] = f"Razorpay Payment Link creation failed ({error_msg})."
+
+                action_rec = RecoveryAction(
+                    id=f"act_{uuid.uuid4().hex[:12]}",
+                    transaction_id=txn.id,
+                    action_type="PAYMENT_LINK",
+                    status="FAILED",
+                    ai_diagnosis=ai_analysis.diagnosis,
+                    ai_probability=ai_analysis.recovery_probability,
+                    ai_risk_level=ai_analysis.risk_level,
+                    ai_reasoning=ai_analysis.reason,
+                    policy_allowed=True,
+                    policy_reasons_json=json.dumps(policy_res.reasons),
+                    requires_human_approval=False,
+                    recovered_amount=0.0,
+                    error_message=str(error_msg),
+                    execution_details_json=json.dumps(plink),
+                    mode=exec_mode,
+                    created_at=now + timedelta(milliseconds=500),
+                    executed_at=now + timedelta(milliseconds=700)
+                )
+                db.add(action_rec)
+            else:
+                txn.status = "RECOVERY_PENDING"
+                txn.razorpay_payment_link = plink_url
+                execution_result["status"] = "PENDING"
+                execution_result["recovered_amount"] = 0.0
+                execution_result["razorpay_payment_link"] = plink_url
+                execution_result["message"] = f"Generated Razorpay Payment Link ({plink_url}). Sent to customer {customer.email}."
+
+                action_rec = RecoveryAction(
+                    id=f"act_{uuid.uuid4().hex[:12]}",
+                    transaction_id=txn.id,
+                    action_type="PAYMENT_LINK",
+                    status="PENDING",
+                    ai_diagnosis=ai_analysis.diagnosis,
+                    ai_probability=ai_analysis.recovery_probability,
+                    ai_risk_level=ai_analysis.risk_level,
+                    ai_reasoning=ai_analysis.reason,
+                    policy_allowed=True,
+                    policy_reasons_json=json.dumps(policy_res.reasons),
+                    requires_human_approval=False,
+                    recovered_amount=0.0,
+                    execution_details_json=json.dumps(plink),
+                    mode=exec_mode,
+                    created_at=now + timedelta(milliseconds=500),
+                    executed_at=now + timedelta(milliseconds=700)
+                )
+                db.add(action_rec)
 
             aud_link = AuditEvent(
                 id=f"aud_{uuid.uuid4().hex[:12]}",

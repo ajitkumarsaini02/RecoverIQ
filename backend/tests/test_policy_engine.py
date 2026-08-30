@@ -177,3 +177,90 @@ def test_policy_high_risk_human_approval():
     result = policy_engine.evaluate(transaction=txn, recommendation=rec)
     assert result.requires_human_approval is True
     assert "High risk assessment" in result.reason
+
+def test_policy_invalid_action_name_failsafe_stop():
+    """Invalid or corrupted recommendation action is rejected by Pydantic and safely handled by Policy Engine."""
+    from pydantic import ValidationError
+
+    # 1. Pydantic schema rejects invalid action literals
+    with pytest.raises(ValidationError):
+        AIAgentRecommendation(
+            diagnosis="Corrupted action test",
+            recovery_probability=0.80,
+            recommended_action="UNKNOWN_UNSAFE_ACTION",
+            risk_level="LOW",
+            reason="Invalid action payload",
+            requires_human_approval=False
+        )
+
+    # 2. Policy engine overrides any corrupted action to STOP
+    txn = Transaction(
+        id="txn_invalid_act",
+        customer_id="cust_inv",
+        amount=1999.0,
+        status="FAILED",
+        payment_method="UPI",
+        failure_reason="UPI_TIMEOUT",
+        retry_count=0
+    )
+    rec = AIAgentRecommendation(
+        diagnosis="Valid diagnosis",
+        recovery_probability=0.80,
+        recommended_action="PAYMENT_LINK",
+        risk_level="LOW",
+        reason="Valid reasoning",
+        requires_human_approval=False
+    )
+    # Simulate runtime property modification
+    object.__setattr__(rec, "recommended_action", "FORGED_ACTION")
+    result = policy_engine.evaluate(transaction=txn, recommendation=rec)
+    assert result.allowed is False
+    assert result.action == "STOP"
+    assert "Invalid or unrecognized" in result.reason
+
+def test_policy_combination_high_value_and_retry_limit():
+    """When both High Value and Max Retries apply, Retry ceiling takes precedence and forces STOP."""
+    txn = Transaction(
+        id="txn_hv_retry_cap",
+        customer_id="cust_comb_1",
+        amount=50000.0, # High value
+        status="FAILED",
+        payment_method="UPI",
+        failure_reason="UPI_TIMEOUT",
+        retry_count=2 # Max retry reached
+    )
+    rec = AIAgentRecommendation(
+        diagnosis="Retry attempt on high-value txn",
+        recovery_probability=0.85,
+        recommended_action="RETRY_PAYMENT",
+        risk_level="LOW",
+        reason="AI asks to retry",
+        requires_human_approval=False
+    )
+    result = policy_engine.evaluate(transaction=txn, recommendation=rec)
+    assert result.allowed is False
+    assert result.action == "STOP"
+    assert result.requires_human_approval is True # Flagged for high-value audit
+
+def test_policy_combination_low_prob_and_high_risk():
+    """When both Low Probability and High Risk apply, action is STOP."""
+    txn = Transaction(
+        id="txn_low_prob_high_risk",
+        customer_id="cust_comb_2",
+        amount=5000.0,
+        status="FAILED",
+        payment_method="CARD",
+        failure_reason="BANK_DECLINED",
+        retry_count=0
+    )
+    rec = AIAgentRecommendation(
+        diagnosis="High risk with low recovery likelihood",
+        recovery_probability=0.12, # < 0.25
+        recommended_action="PAYMENT_LINK",
+        risk_level="HIGH",
+        reason="High risk fraud detection",
+        requires_human_approval=False
+    )
+    result = policy_engine.evaluate(transaction=txn, recommendation=rec)
+    assert result.allowed is False
+    assert result.action == "STOP"

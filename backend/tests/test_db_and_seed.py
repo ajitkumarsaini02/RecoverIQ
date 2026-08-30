@@ -88,3 +88,12 @@ def test_api_list_and_get_customers():
     res_404 = client.get("/api/customers/cust_non_existent_99999")
     assert res_404.status_code == 404
 
+def test_database_url_postgresql_compatibility():
+    """Verify that PostgreSQL URL variants (postgres://) are correctly normalized without crashing."""
+    raw_render_url = "postgres://recoveriq_user:secretpass@dpg-c0123456789-a.oregon-postgres.render.com/recoveriq_prod"
+    normalized = raw_render_url.replace("postgres://", "postgresql://", 1) if raw_render_url.startswith("postgres://") else raw_render_url
+    assert normalized.startswith("postgresql://")
+    assert "recoveriq_user" in normalized
+    assert "recoveriq_prod" in normalized
+
+

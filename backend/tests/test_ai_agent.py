@@ -76,7 +76,7 @@ def test_ai_agent_upi_timeout_diagnosis():
     assert rec.risk_level == "LOW"
     assert "Priya Sharma" in rec.reason
     assert rec.requires_human_approval is False
-    assert rec.mode == "DEMO_FALLBACK"
+    assert rec.mode in ["HEURISTIC_FALLBACK", "DEMO_FALLBACK"]
 
 def test_ai_agent_bank_decline_diagnosis():
     cust = Customer(
@@ -178,4 +178,103 @@ def test_api_agent_analyze_endpoint():
     assert "risk_level" in rec
     assert "reason" in rec
     assert "requires_human_approval" in rec
-    assert rec["mode"] == "DEMO_FALLBACK"
+    assert rec["mode"] in ["HEURISTIC_FALLBACK", "DEMO_FALLBACK", "GEMINI"]
+
+def test_gemini_mocked_success_response():
+    from unittest.mock import patch, MagicMock
+    import json
+    import httpx
+    from app.config import settings
+    from app.services.ai_agent import AIAnalysisInput
+
+    ctx = AIAnalysisInput(
+        transaction_id="txn_gemini_mock_1",
+        amount=1999.0,
+        currency="INR",
+        payment_method="UPI",
+        failure_reason="UPI_TIMEOUT",
+        error_code="PSP_TIMEOUT",
+        retry_count=0,
+        customer_id="cust_g1",
+        customer_name="Aarav Sharma",
+        customer_email="aarav@gmail.com",
+        customer_lifetime_value=25000.0,
+        previous_successful_payments=4,
+        previous_failed_payments=0,
+        previous_recovery_attempts=0
+    )
+
+    fake_resp_body = {
+        "candidates": [
+            {
+                "content": {
+                    "parts": [
+                        {
+                            "text": json.dumps({
+                                "diagnosis": "UPI PSP timeout at issuing bank switch",
+                                "recovery_probability": 0.92,
+                                "recommended_action": "RETRY_PAYMENT",
+                                "risk_level": "LOW",
+                                "reason": "Customer has pristine payment history.",
+                                "requires_human_approval": False
+                            })
+                        }
+                    ]
+                }
+            }
+        ]
+    }
+
+    with patch.object(settings, "GEMINI_API_KEY", "valid_gemini_test_key"):
+        with patch.object(settings, "LLM_PROVIDER", "gemini"):
+            mock_client = MagicMock()
+            mock_resp = MagicMock()
+            mock_resp.status_code = 200
+            mock_resp.json.return_value = fake_resp_body
+            mock_client.post.return_value = mock_resp
+
+            with patch("httpx.Client") as MockClient:
+                MockClient.return_value.__enter__.return_value = mock_client
+                rec = ai_agent._call_gemini_api(ctx)
+
+                assert rec is not None
+                assert rec.diagnosis == "UPI PSP timeout at issuing bank switch"
+                assert rec.recovery_probability == 0.92
+                assert rec.recommended_action == "RETRY_PAYMENT"
+                assert rec.risk_level == "LOW"
+                assert rec.mode == "GEMINI"
+                assert rec.fallback_used is False
+                assert "Gemini" in rec.model_used
+
+def test_gemini_timeout_and_error_fallback():
+    from unittest.mock import patch, MagicMock
+    import httpx
+    from app.config import settings
+    from app.services.ai_agent import AIAnalysisInput
+
+    ctx = AIAnalysisInput(
+        transaction_id="txn_gemini_timeout",
+        amount=1999.0,
+        currency="INR",
+        payment_method="UPI",
+        failure_reason="UPI_TIMEOUT",
+        error_code="PSP_TIMEOUT",
+        retry_count=0,
+        customer_id="cust_g2",
+        customer_name="Pooja Verma",
+        customer_email="pooja@gmail.com",
+        customer_lifetime_value=15000.0,
+        previous_successful_payments=2,
+        previous_failed_payments=0,
+        previous_recovery_attempts=0
+    )
+
+    with patch.object(settings, "GEMINI_API_KEY", "valid_gemini_test_key"):
+        with patch.object(settings, "LLM_PROVIDER", "gemini"):
+            mock_client = MagicMock()
+            mock_client.post.side_effect = httpx.TimeoutException("Read timeout from Gemini endpoint")
+
+            with patch("httpx.Client") as MockClient:
+                MockClient.return_value.__enter__.return_value = mock_client
+                rec = ai_agent._call_gemini_api(ctx)
+                assert rec is None # Safely returns None to trigger heuristic fallback

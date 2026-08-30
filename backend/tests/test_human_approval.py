@@ -150,3 +150,61 @@ def test_human_rejection_workflow():
     events = audit_res.json()
     event_types = [e["event_type"] for e in events]
     assert "REJECTED" in event_types or "HUMAN_REJECTED" in event_types
+
+def test_duplicate_approve_and_state_guards():
+    """Verify that approving/rejecting already finalized actions is safely handled and invalid IDs return 404."""
+    client = TestClient(app)
+    db = TestSession()
+    cust = Customer(
+        id="cust_appr_guard_1",
+        name="State Guard Customer",
+        email="guard@domain.in",
+        phone="+919811223377",
+        lifetime_value=60000.0,
+        successful_payments_count=3,
+        failed_payments_count=0,
+        risk_score=0.1
+    )
+    txn = Transaction(
+        id="txn_appr_guard_1",
+        customer_id=cust.id,
+        amount=30000.0, # High value
+        currency="INR",
+        status="FAILED",
+        payment_method="CARD",
+        failure_reason="BANK_DECLINED",
+        retry_count=0
+    )
+    db.add(cust)
+    db.add(txn)
+    db.commit()
+
+    # Trigger recovery execution -> Gates for approval
+    client.post("/api/recovery/execute/txn_appr_guard_1")
+
+    # Get action ID
+    appr_res = client.get("/api/approvals")
+    target = next(a for a in appr_res.json() if a["transaction_id"] == "txn_appr_guard_1")
+    act_id = target["id"]
+
+    # 1. Approve once
+    res1 = client.post(f"/api/recovery/approve/{act_id}")
+    assert res1.status_code == 200
+
+    # 2. Duplicate Approve -> Safely handled
+    res2 = client.post(f"/api/recovery/approve/{act_id}")
+    assert res2.status_code == 200
+    assert "already" in res2.json()["message"].lower()
+
+    # 3. Reject after Approve -> Safely handled
+    res3 = client.post(f"/api/recovery/reject/{act_id}", json={"reason": "Late rejection attempt"})
+    assert res3.status_code == 200
+    assert "already" in res3.json()["message"].lower()
+
+    # 4. Invalid Action ID -> 404
+    res4 = client.post("/api/recovery/approve/act_non_existent_999")
+    assert res4.status_code == 404
+
+    res5 = client.post("/api/recovery/reject/act_non_existent_999")
+    assert res5.status_code == 404
+    db.close()

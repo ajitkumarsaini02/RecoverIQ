@@ -9,6 +9,8 @@ from pydantic import BaseModel
 
 from app.db.session import get_db
 from app.db.models import Transaction, Customer, RecoveryAction, AuditEvent
+from app.services.razorpay_service import razorpay_service
+from app.services.audit_service import audit_service
 from app.services.ai_agent import ai_agent
 from app.services.policy_engine import policy_engine
 from app.services.recovery_executor import recovery_executor, RecoveryExecutionResponse
@@ -197,6 +199,9 @@ def reject_action(action_id: str, req: Optional[RejectRequest] = None, db: Sessi
     if not act:
         raise HTTPException(status_code=404, detail="Recovery action not found")
 
+    if act.status != "PENDING_APPROVAL":
+        return {"status": act.status, "message": f"Action is already in '{act.status}' status."}
+
     rejection_reason = req.reason if req and req.reason else "Merchant manually rejected recovery"
     now = datetime.now(timezone.utc)
     act.status = "REJECTED"
@@ -224,6 +229,163 @@ def reject_action(action_id: str, req: Optional[RejectRequest] = None, db: Sessi
         "status": "REJECTED",
         "action_id": act.id,
         "message": f"Action rejected: {rejection_reason}"
+    }
+
+class VerifyPaymentRequest(BaseModel):
+    payment_id: Optional[str] = None
+    razorpay_signature: Optional[str] = None
+
+@router.post("/recovery/verify/{transaction_id}")
+async def verify_transaction_payment(
+    transaction_id: str,
+    req: Optional[VerifyPaymentRequest] = None,
+    db: Session = Depends(get_db)
+):
+    """
+    Independently verifies captured payment status on Razorpay Test API.
+    Guarantees that a transaction is transitioned to RECOVERED only if Razorpay confirms capture.
+    """
+    txn = db.query(Transaction).filter(Transaction.id == transaction_id).first()
+    if not txn:
+        raise HTTPException(status_code=404, detail=f"Transaction '{transaction_id}' not found")
+
+    now = datetime.now(timezone.utc)
+
+    # Idempotent return if already recovered
+    if txn.status == "RECOVERED":
+        return {
+            "status": "RECOVERED",
+            "transaction_id": txn.id,
+            "recovered_amount": txn.amount,
+            "verified": True,
+            "message": "Payment was already verified and captured."
+        }
+
+    payment_id = req.payment_id if req else None
+    signature = req.razorpay_signature if req else None
+
+    # Check signature if provided
+    if signature and txn.razorpay_order_id and payment_id:
+        sig_valid = razorpay_service.verify_payment_signature(
+            order_id=txn.razorpay_order_id,
+            payment_id=payment_id,
+            signature=signature
+        )
+        if not sig_valid:
+            return {
+                "status": "FAILED",
+                "transaction_id": txn.id,
+                "recovered_amount": 0.0,
+                "verified": False,
+                "message": "Invalid Razorpay payment signature."
+            }
+
+    # Fetch payments from Razorpay
+    payments_to_check = []
+    if payment_id:
+        p_data = await razorpay_service.fetch_payment(payment_id)
+        if p_data and p_data.get("id"):
+            payments_to_check.append(p_data)
+    elif txn.razorpay_order_id:
+        order_payments = await razorpay_service.fetch_order_payments(txn.razorpay_order_id)
+        payments_to_check.extend(order_payments)
+
+    # Check for captured payment
+    captured_pay = next((p for p in payments_to_check if p.get("status") == "captured"), None)
+    if captured_pay:
+        pay_id = captured_pay.get("id")
+        txn.status = "RECOVERED"
+        txn.razorpay_payment_id = pay_id
+        txn.updated_at = now
+
+        # Update or create recovery action
+        action_rec = RecoveryAction(
+            id=f"act_{uuid.uuid4().hex[:12]}",
+            transaction_id=txn.id,
+            action_type="VERIFIED_PAYMENT",
+            status="SUCCESS",
+            ai_diagnosis="Payment independently verified via Razorpay API",
+            ai_probability=1.0,
+            ai_risk_level="LOW",
+            ai_reasoning="Payment capture verified with gateway.",
+            policy_allowed=True,
+            policy_reasons_json="[]",
+            requires_human_approval=False,
+            recovered_amount=txn.amount,
+            execution_details_json=json.dumps(captured_pay),
+            mode="TEST_MODE",
+            created_at=now,
+            executed_at=now
+        )
+        db.add(action_rec)
+
+        # Audit Event
+        audit_service.log_payment_recovered(
+            db=db,
+            transaction_id=txn.id,
+            amount_recovered=txn.amount,
+            payment_id=pay_id,
+            mode="TEST_MODE"
+        )
+        db.commit()
+
+        return {
+            "status": "RECOVERED",
+            "transaction_id": txn.id,
+            "recovered_amount": txn.amount,
+            "payment_id": pay_id,
+            "verified": True,
+            "message": f"Payment {pay_id} verified as captured. Revenue recovered: ₹{txn.amount:,.0f}"
+        }
+
+    # Check for failed payment
+    failed_pay = next((p for p in payments_to_check if p.get("status") == "failed"), None)
+    if failed_pay:
+        txn.status = "FAILED"
+        txn.updated_at = now
+
+        action_rec = RecoveryAction(
+            id=f"act_{uuid.uuid4().hex[:12]}",
+            transaction_id=txn.id,
+            action_type="VERIFIED_PAYMENT",
+            status="FAILED",
+            ai_diagnosis="Payment failed on Razorpay gateway",
+            ai_probability=0.0,
+            ai_risk_level="HIGH",
+            ai_reasoning=failed_pay.get("error_description", "Payment failed"),
+            policy_allowed=True,
+            policy_reasons_json="[]",
+            requires_human_approval=False,
+            recovered_amount=0.0,
+            execution_details_json=json.dumps(failed_pay),
+            mode="TEST_MODE",
+            created_at=now,
+            executed_at=now
+        )
+        db.add(action_rec)
+
+        audit_service.log_recovery_failed(
+            db=db,
+            transaction_id=txn.id,
+            error_message=failed_pay.get("error_description", "Payment failed on gateway")
+        )
+        db.commit()
+
+        return {
+            "status": "FAILED",
+            "transaction_id": txn.id,
+            "recovered_amount": 0.0,
+            "verified": False,
+            "message": f"Payment failed on gateway: {failed_pay.get('error_description', 'Payment failed')}"
+        }
+
+    # Otherwise remains pending
+    return {
+        "status": txn.status,
+        "transaction_id": txn.id,
+        "recovered_amount": 0.0,
+        "verified": False,
+        "message": "Payment not yet captured on gateway. Status remains pending."
     }
 
 @router.get("/audit", response_model=List[AuditEventSchema])

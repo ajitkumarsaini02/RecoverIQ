@@ -80,3 +80,52 @@ def test_api_get_audit_trail_filtering():
     assert len(ai_events) > 0
     for e in ai_events:
         assert e["actor"] == "AI_AGENT"
+
+def test_audit_trail_success_recovery_consistency():
+    """Verify that a successful recovery pipeline creates consistent audit events without contradictions."""
+    client = TestClient(app)
+    res = client.post("/api/demo/scenario", json={"scenario": "temporary_upi_failure", "mode": "SIMULATION_MODE"})
+    assert res.status_code == 200
+    data = res.json()
+
+    txn = data["transaction"]
+    recov = data["recovery_result"]
+    events = data["audit_timeline"]
+
+    # Assert no contradictions across state layers
+    assert txn["status"] == "RECOVERED"
+    assert recov["status"] == "SUCCESS"
+    assert recov["recovered_amount"] == txn["amount"]
+    assert txn["razorpay_payment_id"] is not None
+
+    event_types = [e["event_type"] for e in events]
+    assert "PAYMENT_FAILED_DETECTED" in event_types or "PAYMENT_FAILED" in event_types
+    assert "AI_ANALYSIS_COMPLETED" in event_types or "FAILURE_ANALYZED" in event_types
+    assert "POLICY_EVALUATED" in event_types or "POLICY_VALIDATED" in event_types
+    assert "PAYMENT_RECOVERED" in event_types
+
+    # Ensure no secrets leak into audit details
+    for e in events:
+        details_str = str(e.get("details", {})).lower()
+        assert "key_secret" not in details_str
+        assert "api_key" not in details_str
+
+def test_audit_trail_stopped_recovery_consistency():
+    """Verify that a max-retries stopped transaction generates correct stop audit trail."""
+    client = TestClient(app)
+    res = client.post("/api/demo/scenario", json={"scenario": "repeated_failure", "mode": "SIMULATION_MODE"})
+    assert res.status_code == 200
+    data = res.json()
+
+    txn = data["transaction"]
+    recov = data["recovery_result"]
+    events = data["audit_timeline"]
+
+    assert txn["status"] == "STOPPED"
+    assert recov["status"] == "STOPPED"
+    assert recov["recovered_amount"] == 0.0
+
+    event_types = [e["event_type"] for e in events]
+    assert "RECOVERY_STOPPED" in event_types
+    # Must NOT have PAYMENT_RECOVERED or RECOVERY_EXECUTED
+    assert "PAYMENT_RECOVERED" not in event_types
