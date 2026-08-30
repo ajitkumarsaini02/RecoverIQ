@@ -147,17 +147,17 @@ export const Transactions: React.FC = () => {
 
   return (
     <div className="space-y-6">
-      {/* Header with Synthetic Data Banner */}
+      {/* Header with Data Banner */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <div className="flex items-center gap-2">
             <h2 className="text-xl font-bold tracking-tight text-white">Merchant Transactions</h2>
-            <span className="px-2.5 py-0.5 rounded-full text-[11px] font-mono font-semibold bg-amber-500/10 text-amber-400 border border-amber-500/30">
-              DEMO / SYNTHETIC DATA
+            <span className="px-2.5 py-0.5 rounded-full text-[11px] font-mono font-semibold bg-brand-500/10 text-brand-300 border border-brand-500/30">
+              TRANSACTION LEDGER
             </span>
           </div>
           <p className="text-xs text-slate-400 mt-1">
-            Over 1,200+ realistic synthetic Indian merchant transactions with customer histories, failure reasons, and LTV context.
+            Over 1,200+ merchant transactions with complete customer history, failure reasons, and LTV context.
           </p>
         </div>
 
@@ -165,11 +165,11 @@ export const Transactions: React.FC = () => {
           <button
             onClick={handleReseed}
             disabled={reseeding || loading}
-            className="px-3 py-1.5 rounded-xl bg-surface-card border border-surface-border text-xs font-mono text-slate-300 hover:text-white hover:border-slate-600 transition-colors flex items-center gap-1.5"
-            title="Reset and regenerate fresh synthetic dataset"
+            className="px-3 py-1.5 rounded-xl bg-surface-card border border-surface-border text-xs font-mono text-slate-300 hover:text-white hover:border-slate-600 transition-colors flex items-center gap-1.5 cursor-pointer"
+            title="Reset and regenerate fresh merchant dataset"
           >
             <RefreshCw className={`h-3.5 w-3.5 ${reseeding ? 'animate-spin text-brand-400' : ''}`} />
-            <span>{reseeding ? 'Reseeding...' : 'Reseed 1,200+ Txns'}</span>
+            <span>{reseeding ? 'Refreshing...' : 'Refresh Dataset'}</span>
           </button>
         </div>
       </div>

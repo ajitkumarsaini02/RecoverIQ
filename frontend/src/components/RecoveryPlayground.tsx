@@ -36,7 +36,7 @@ const PRESET_SCENARIOS: PresetScenarioCard[] = [
     method: 'UPI',
     reason: 'UPI_TIMEOUT',
     expectedOutcome: 'AI: 91% Prob -> Auto-Retry -> ₹4,999 Recovered',
-    badge: 'FLAGSHIP DEMO',
+    badge: 'UPI LATENCY',
     badgeColor: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
   },
   {
@@ -47,7 +47,7 @@ const PRESET_SCENARIOS: PresetScenarioCard[] = [
     method: 'CARD',
     reason: 'BANK_DECLINED',
     expectedOutcome: 'AI: Alternate Method -> Smart Link Dispatched',
-    badge: 'PAYMENT METHOD',
+    badge: 'ISSUER DECLINE',
     badgeColor: 'bg-blue-500/20 text-blue-300 border-blue-500/40'
   },
   {
@@ -58,7 +58,7 @@ const PRESET_SCENARIOS: PresetScenarioCard[] = [
     method: 'UPI',
     reason: 'NETWORK_ERROR',
     expectedOutcome: 'AI: 88% Prob -> Immediate Safe Retry -> Recovered',
-    badge: 'NETWORK',
+    badge: 'GATEWAY TIMEOUT',
     badgeColor: 'bg-purple-500/20 text-purple-300 border-purple-500/40'
   },
   {
@@ -69,7 +69,7 @@ const PRESET_SCENARIOS: PresetScenarioCard[] = [
     method: 'NETBANKING',
     reason: 'INSUFFICIENT_FUNDS',
     expectedOutcome: 'AI: Payment Link Recovery -> Scheduled Link Sent',
-    badge: 'PAYMENT LINK',
+    badge: 'INSUFFICIENT FUNDS',
     badgeColor: 'bg-amber-500/20 text-amber-300 border-amber-500/40'
   },
   {
@@ -80,7 +80,7 @@ const PRESET_SCENARIOS: PresetScenarioCard[] = [
     method: 'CARD',
     reason: 'BANK_DECLINED',
     expectedOutcome: 'Policy Engine: 2-Retry Ceiling Reached -> STOP',
-    badge: 'GUARDRAIL STOP',
+    badge: 'RETRY CEILING',
     badgeColor: 'bg-slate-500/20 text-slate-300 border-slate-500/40'
   },
   {
@@ -91,7 +91,7 @@ const PRESET_SCENARIOS: PresetScenarioCard[] = [
     method: 'CARD',
     reason: 'BANK_DECLINED',
     expectedOutcome: 'Policy Engine: Gated -> Approval Queue Triggered',
-    badge: 'HUMAN APPROVAL',
+    badge: 'ENTERPRISE ESCALATION',
     badgeColor: 'bg-rose-500/20 text-rose-300 border-rose-500/40'
   },
 ];
@@ -114,7 +114,7 @@ export const RecoveryPlayground: React.FC = () => {
 
       const data = await runDemoScenario(selectedScenarioId);
       
-      // Animate through all 7 pipeline steps smoothly for hackathon judges
+      // Animate through all 7 pipeline steps smoothly for execution visibility
       setTimeout(() => setStepIndex(2), 250); // Step 2: Gateway Failure
       setTimeout(() => setStepIndex(3), 600); // Step 3: AI Analysis
       setTimeout(() => setStepIndex(4), 950); // Step 4: Recovery Decision
@@ -142,25 +142,22 @@ export const RecoveryPlayground: React.FC = () => {
         <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-6">
           <div className="max-w-2xl">
             <div className="flex items-center gap-2 mb-2">
-              <span className="px-2.5 py-0.5 rounded-full text-[11px] font-mono font-semibold bg-brand-500/20 text-brand-300 border border-brand-500/40">
-                Flagship Hackathon Demo
-              </span>
-              <span className="px-2.5 py-0.5 rounded-full text-[11px] font-mono font-semibold bg-amber-500/10 text-amber-400 border border-amber-500/30">
-                TEST MODE / SIMULATION
+              <span className="px-2.5 py-0.5 rounded-full text-[11px] font-mono font-semibold bg-brand-500/10 text-brand-300 border border-brand-500/30">
+                Autonomous Pipeline
               </span>
             </div>
             <h2 className="text-2xl font-bold tracking-tight text-white">
-              Autonomous Recovery Playground
+              Autonomous Recovery
             </h2>
             <p className="text-sm text-slate-300 mt-1">
-              Experience the end-to-end intelligent recovery pipeline: Customer payment fails on Razorpay Gateway $\rightarrow$ AI agent analyzes history $\rightarrow$ Policy engine checks safety guardrails $\rightarrow$ Safe recovery executed.
+              Intelligent payment recovery pipeline that analyzes failed transactions, evaluates recovery risk, applies policy guardrails, and executes the safest recovery action.
             </p>
           </div>
 
           <button
             onClick={handleRunScenario}
             disabled={running}
-            className="px-6 py-3.5 rounded-xl bg-gradient-to-r from-brand-600 to-emerald-500 hover:from-brand-500 hover:to-emerald-400 text-white font-bold text-sm shadow-xl shadow-brand-500/25 flex items-center justify-center gap-2.5 transition-all transform active:scale-95 disabled:opacity-50 shrink-0"
+            className="px-6 py-3.5 rounded-xl bg-gradient-to-r from-brand-600 to-emerald-500 hover:from-brand-500 hover:to-emerald-400 text-white font-bold text-sm shadow-xl shadow-brand-500/25 flex items-center justify-center gap-2.5 transition-all transform active:scale-95 disabled:opacity-50 shrink-0 cursor-pointer"
           >
             <Play className={`h-4 w-4 fill-white ${running ? 'animate-spin' : ''}`} />
             <span>{running ? 'Executing Recovery Pipeline...' : 'Run Scenario'}</span>
@@ -178,7 +175,7 @@ export const RecoveryPlayground: React.FC = () => {
       {/* Scenario Selector Grid */}
       <div>
         <h3 className="text-xs font-mono uppercase tracking-wider text-slate-400 mb-3">
-          Select Merchant Payment Scenario (6 Presets)
+          RECOVERY SCENARIOS
         </h3>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
           {PRESET_SCENARIOS.map((s) => {
@@ -491,9 +488,9 @@ export const RecoveryPlayground: React.FC = () => {
         ) : (
           <div className="py-12 text-center text-slate-400 space-y-2">
             <Zap className="h-8 w-8 mx-auto text-brand-400/60 animate-pulse" />
-            <p className="font-medium text-slate-300">Ready to simulate payment recovery</p>
+            <p className="font-medium text-slate-300">Ready to execute autonomous recovery</p>
             <p className="text-xs text-slate-500 max-w-md mx-auto">
-              Select any scenario above and click <strong className="text-white">"Run Scenario"</strong> to experience the live 7-step pipeline.
+              Select any recovery scenario above and click <strong className="text-white">"Run Scenario"</strong> to evaluate the live recovery pipeline.
             </p>
           </div>
         )}

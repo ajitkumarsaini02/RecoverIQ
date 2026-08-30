@@ -39,7 +39,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ status, onRefresh })
           <div className="flex items-center gap-2">
             <h2 className="text-xl font-bold tracking-tight text-white">System & Integration Status</h2>
             <span className="px-2.5 py-0.5 rounded-full text-[11px] font-mono font-semibold bg-brand-500/20 text-brand-300 border border-brand-500/30">
-              ENVIRONMENT: {status?.mode || 'TEST MODE / DEMO'}
+              ENVIRONMENT: {status?.mode || 'SANDBOX'}
             </span>
           </div>
           <p className="text-xs text-slate-400 mt-1">

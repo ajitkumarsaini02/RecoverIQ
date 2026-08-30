@@ -68,9 +68,6 @@ export const TransactionDetailModal: React.FC<TransactionDetailModalProps> = ({
                 <span className={`text-[10px] font-mono font-semibold px-2 py-0.5 rounded-full border ${getStatusBadge(transaction.status)}`}>
                   {transaction.status}
                 </span>
-                <span className="text-[10px] font-mono px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 border border-slate-700">
-                  DEMO DATA
-                </span>
               </div>
               <h3 className="text-xl font-bold text-white">
                 ₹{transaction.amount.toLocaleString('en-IN')}

@@ -28,8 +28,8 @@ export const Topbar: React.FC<TopbarProps> = ({ status, loading, onRefresh, onLo
             <h1 className="text-lg font-bold tracking-tight text-white flex items-center gap-1.5 group-hover:text-brand-300 transition-colors">
               Recover<span className="text-brand-400">IQ</span>
             </h1>
-            <span className="text-[10px] uppercase font-mono px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/30 font-semibold tracking-wider">
-              TEST MODE / DEMO
+            <span className="text-[10px] uppercase font-mono px-2 py-0.5 rounded-full bg-brand-500/10 text-brand-300 border border-brand-500/30 font-semibold tracking-wider">
+              ENTERPRISE
             </span>
           </div>
           <p className="text-xs text-slate-400 group-hover:text-slate-300 transition-colors">Razorpay AI Revenue Recovery Engine</p>

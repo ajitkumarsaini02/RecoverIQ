@@ -37,25 +37,25 @@ export const SimulationView: React.FC = () => {
               <span className="px-2.5 py-0.5 rounded-full text-[11px] font-mono font-semibold bg-purple-500/20 text-purple-300 border border-purple-500/40">
                 1,000+ Transaction Portfolio Engine
               </span>
-              <span className="px-2.5 py-0.5 rounded-full text-[11px] font-mono font-semibold bg-amber-500/10 text-amber-400 border border-amber-500/30">
-                Synthetic/Test Data — Not Live Merchant Revenue
+              <span className="px-2.5 py-0.5 rounded-full text-[11px] font-mono font-semibold bg-brand-500/10 text-brand-300 border border-brand-500/30">
+                PORTFOLIO BATCH RECOVERY
               </span>
             </div>
             <h2 className="text-2xl font-bold tracking-tight text-white">
-              Large-Scale Merchant Recovery Simulation
+              Recovery Analytics
             </h2>
             <p className="text-sm text-slate-300 mt-1">
-              Simulate autonomous AI diagnosis, policy guardrail validation, and safe payment retry execution across hundreds of unrecovered merchant transactions in real-time.
+              Analyze and batch-recover unrecovered failed transactions across the merchant portfolio using autonomous AI assessment and policy engine safety controls.
             </p>
           </div>
 
           <button
             onClick={handleRunSimulation}
             disabled={running}
-            className="px-6 py-3.5 rounded-xl bg-gradient-to-r from-purple-600 to-brand-600 hover:from-purple-500 hover:to-brand-500 text-white font-bold text-sm shadow-xl shadow-purple-500/25 flex items-center justify-center gap-2.5 transition-all transform active:scale-95 disabled:opacity-50 shrink-0"
+            className="px-6 py-3.5 rounded-xl bg-gradient-to-r from-purple-600 to-brand-600 hover:from-purple-500 hover:to-brand-500 text-white font-bold text-sm shadow-xl shadow-purple-500/25 flex items-center justify-center gap-2.5 transition-all transform active:scale-95 disabled:opacity-50 shrink-0 cursor-pointer"
           >
             <Sparkles className={`h-4 w-4 ${running ? 'animate-spin' : ''}`} />
-            <span>{running ? 'Simulating Batch Portfolio Recovery...' : 'Run Recovery Simulation'}</span>
+            <span>{running ? 'Evaluating Batch Portfolio Recovery...' : 'Run Recovery Analytics'}</span>
           </button>
         </div>
       </div>
@@ -74,10 +74,10 @@ export const SimulationView: React.FC = () => {
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
               <div className="flex items-center gap-2">
                 <CheckCircle2 className="h-5 w-5 text-emerald-400" />
-                <h3 className="text-base font-bold text-white">Simulation Completed Successfully</h3>
+                <h3 className="text-base font-bold text-white">Batch Recovery Completed Successfully</h3>
               </div>
               <span className="text-xs font-mono text-slate-400">
-                Simulation ID: <code className="text-brand-300">{simResult.simulation_id}</code>
+                Batch Run ID: <code className="text-brand-300">{simResult.simulation_id}</code>
               </span>
             </div>
 
@@ -159,18 +159,18 @@ export const SimulationView: React.FC = () => {
             </div>
           </div>
 
-          {/* Simulation Footer Note */}
+          {/* Footer Note */}
           <div className="p-4 rounded-xl bg-surface-base border border-surface-border text-center text-xs text-slate-400">
-            <span className="font-semibold text-slate-300">Data Label: </span>
-            <span>Synthetic/Test Data — Not Live Merchant Revenue. All transaction records and recovery events are stored in the SQLite database and reflected live across the Dashboard and Audit Trail.</span>
+            <span className="font-semibold text-slate-300">Portfolio Ledger: </span>
+            <span>All transaction records and recovery events are stored in the database and reflected live across the Dashboard and Audit Trail.</span>
           </div>
         </div>
       ) : (
         <div className="p-12 rounded-2xl glass-panel border border-surface-border text-center space-y-3">
           <Sparkles className="h-10 w-10 text-purple-400 mx-auto" />
-          <h3 className="text-base font-bold text-white">Ready for Large-Scale Batch Simulation</h3>
+          <h3 className="text-base font-bold text-white">Ready for Portfolio Batch Recovery</h3>
           <p className="text-xs text-slate-400 max-w-md mx-auto">
-            Click <strong className="text-white">"Run Recovery Simulation"</strong> to evaluate up to 250 unrecovered payment failures simultaneously across the portfolio.
+            Click <strong className="text-white">"Run Recovery Analytics"</strong> to evaluate unrecovered payment failures simultaneously across the portfolio.
           </p>
         </div>
       )}

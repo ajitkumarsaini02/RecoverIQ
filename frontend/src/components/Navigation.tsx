@@ -32,15 +32,13 @@ export const Navigation: React.FC<NavigationProps> = ({
   const navItems = [
     {
       id: 'playground' as NavTab,
-      label: 'Recovery Playground',
+      label: 'Autonomous Recovery',
       icon: Play,
-      badge: 'DEMO',
-      badgeColor: 'bg-brand-500/20 text-brand-400 border-brand-500/40',
-      description: 'Interactive live failure recovery'
+      description: 'Intelligent payment recovery pipeline'
     },
     {
       id: 'dashboard' as NavTab,
-      label: 'Fintech Dashboard',
+      label: 'Dashboard',
       icon: LayoutDashboard,
       description: 'KPIs & recovery analytics'
     },
@@ -48,7 +46,7 @@ export const Navigation: React.FC<NavigationProps> = ({
       id: 'transactions' as NavTab,
       label: 'Transactions',
       icon: Receipt,
-      description: '1,000+ synthetic merchant txns'
+      description: 'Merchant payment ledger'
     },
     {
       id: 'approvals' as NavTab,
@@ -60,9 +58,9 @@ export const Navigation: React.FC<NavigationProps> = ({
     },
     {
       id: 'simulation' as NavTab,
-      label: 'Simulation Engine',
+      label: 'Recovery Analytics',
       icon: Sparkles,
-      description: 'Batch recovery calculation'
+      description: 'Portfolio batch recovery evaluation'
     },
     {
       id: 'audit' as NavTab,
@@ -74,7 +72,7 @@ export const Navigation: React.FC<NavigationProps> = ({
       id: 'settings' as NavTab,
       label: 'System & Keys',
       icon: Settings,
-      description: 'Razorpay & AI configuration'
+      description: 'Gateway & engine configuration'
     },
   ];
 
@@ -122,12 +120,12 @@ export const Navigation: React.FC<NavigationProps> = ({
       {/* Footer info */}
       <div className="p-3 rounded-xl bg-surface-base/80 border border-surface-border/60 text-xs space-y-1">
         <div className="flex items-center justify-between">
-          <span className="text-slate-400">Track:</span>
-          <span className="font-semibold text-slate-200">AI Revenue Recovery</span>
+          <span className="text-slate-400">Gateway:</span>
+          <span className="font-semibold text-slate-200">Razorpay</span>
         </div>
         <div className="flex items-center justify-between">
-          <span className="text-slate-400">Platform:</span>
-          <span className="text-razorpay-accent font-semibold">Razorpay Buildathon</span>
+          <span className="text-slate-400">Engine:</span>
+          <span className="text-brand-400 font-semibold">Autonomous v1.0</span>
         </div>
       </div>
     </aside>

@@ -58,11 +58,11 @@ export const DashboardView: React.FC = () => {
           <div className="flex items-center gap-2">
             <h2 className="text-xl font-bold tracking-tight text-white">Revenue Recovery Intelligence</h2>
             <span className="px-2.5 py-0.5 rounded-full text-[11px] font-mono font-semibold bg-brand-500/10 text-brand-300 border border-brand-500/30">
-              DEMO / SYNTHETIC DATA
+              LIVE METRICS
             </span>
           </div>
           <p className="text-xs text-slate-400 mt-1">
-            Real-time financial recovery analytics computed dynamically across SQLite transaction records.
+            Real-time financial recovery analytics computed dynamically across active transaction records.
           </p>
         </div>
 
