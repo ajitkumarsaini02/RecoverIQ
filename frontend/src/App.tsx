@@ -54,6 +54,7 @@ export const App: React.FC = () => {
         status={systemStatus} 
         loading={loadingHealth} 
         onRefresh={loadStatusAndApprovals} 
+        onLogoClick={() => setActiveTab('playground')}
       />
 
       <div className="flex flex-1">

@@ -6,30 +6,35 @@ interface TopbarProps {
   status: SystemStatus | null;
   loading: boolean;
   onRefresh: () => void;
+  onLogoClick?: () => void;
 }
 
-export const Topbar: React.FC<TopbarProps> = ({ status, loading, onRefresh }) => {
+export const Topbar: React.FC<TopbarProps> = ({ status, loading, onRefresh, onLogoClick }) => {
   const isRzpLive = status?.integrations.razorpay.configured;
   const isAiLive = status?.integrations.ai_engine.configured;
 
   return (
     <header className="h-16 border-b border-surface-border bg-surface-card/80 backdrop-blur-md px-6 flex items-center justify-between sticky top-0 z-30">
-      <div className="flex items-center gap-3">
-        <div className="h-9 w-9 rounded-xl bg-gradient-to-tr from-brand-600 to-blue-600 flex items-center justify-center shadow-lg shadow-brand-500/20">
+      <button 
+        onClick={onLogoClick}
+        className="flex items-center gap-3 text-left group focus:outline-none transition-all active:scale-95 cursor-pointer"
+        title="Go to Home / Playground"
+      >
+        <div className="h-9 w-9 rounded-xl bg-gradient-to-tr from-brand-600 to-blue-600 flex items-center justify-center shadow-lg shadow-brand-500/20 group-hover:shadow-brand-500/40 transition-shadow">
           <Zap className="h-5 w-5 text-white" />
         </div>
         <div>
           <div className="flex items-center gap-2">
-            <h1 className="text-lg font-bold tracking-tight text-white flex items-center gap-1.5">
+            <h1 className="text-lg font-bold tracking-tight text-white flex items-center gap-1.5 group-hover:text-brand-300 transition-colors">
               Recover<span className="text-brand-400">IQ</span>
             </h1>
             <span className="text-[10px] uppercase font-mono px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-400 border border-amber-500/30 font-semibold tracking-wider">
               TEST MODE / DEMO
             </span>
           </div>
-          <p className="text-xs text-slate-400">Razorpay AI Revenue Recovery Engine</p>
+          <p className="text-xs text-slate-400 group-hover:text-slate-300 transition-colors">Razorpay AI Revenue Recovery Engine</p>
         </div>
-      </div>
+      </button>
 
       {/* Integration Badges */}
       <div className="flex items-center gap-3">
