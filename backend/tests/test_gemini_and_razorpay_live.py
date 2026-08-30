@@ -12,8 +12,18 @@ from tests.conftest import TestSession
 from app.db.models import Transaction, Customer, RecoveryAction, AuditEvent
 from app.services.ai_agent import ai_agent, AIAnalysisInput
 from app.services.razorpay_service import razorpay_service
+from app.services.policy_engine import policy_engine
 
 client = TestClient(app)
+
+def post_signed_webhook(client_obj, payload, secret="whsec_dummy"):
+    payload_bytes = json.dumps(payload).encode("utf-8")
+    sig = hmac.new(secret.encode("utf-8"), payload_bytes, hashlib.sha256).hexdigest()
+    return client_obj.post(
+        "/api/webhook/razorpay",
+        content=payload_bytes,
+        headers={"Content-Type": "application/json", "X-Razorpay-Signature": sig}
+    )
 
 def test_gemini_api_call_mocked_success():
     """Verify that when Gemini credentials are configured, the agent correctly parses structured JSON."""
@@ -186,7 +196,7 @@ def test_razorpay_webhook_event_processing():
         }
     }
 
-    res = client.post("/api/webhook/razorpay", json=webhook_payload)
+    res = post_signed_webhook(client, webhook_payload)
     assert res.status_code == 200
     assert res.json()["status"] == "success"
 
@@ -362,11 +372,11 @@ def test_duplicate_webhook_idempotency():
     }
 
     # First webhook
-    res1 = client.post("/api/webhook/razorpay", json=webhook_payload)
+    res1 = post_signed_webhook(client, webhook_payload)
     assert res1.status_code == 200
 
     # Second identical webhook
-    res2 = client.post("/api/webhook/razorpay", json=webhook_payload)
+    res2 = post_signed_webhook(client, webhook_payload)
     assert res2.status_code == 200
 
     # Verify transaction remains RECOVERED without duplicate recovery actions
@@ -793,7 +803,7 @@ def test_webhook_order_paid_event():
         }
     }
 
-    res = client.post("/api/webhook/razorpay", json=webhook_payload)
+    res = post_signed_webhook(client, webhook_payload)
     assert res.status_code == 200
     data = res.json()
     assert data["status"] == "success"
@@ -858,7 +868,7 @@ def test_webhook_payment_link_paid_event():
         }
     }
 
-    res = client.post("/api/webhook/razorpay", json=webhook_payload)
+    res = post_signed_webhook(client, webhook_payload)
     assert res.status_code == 200
     data = res.json()
     assert data["status"] == "success"
@@ -990,6 +1000,109 @@ def test_already_recovered_transaction_idempotent_response():
         assert data["details"].get("already_recovered") is True
         # Gateway was not touched
         assert mock_create_order.call_count == 0
+    db.close()
+
+
+def test_razorpay_test_mode_missing_credentials_produces_error():
+    """Verify that requesting TEST_MODE when Razorpay keys are unconfigured produces a clear error."""
+    with patch.object(settings, "RAZORPAY_KEY_ID", ""):
+        with patch.object(settings, "RAZORPAY_KEY_SECRET", ""):
+            db = TestSession()
+            cust = Customer(
+                id="cust_err_rzp",
+                name="Error Cust",
+                email="err@domain.in",
+                phone="+919811223399",
+                lifetime_value=5000.0,
+                successful_payments_count=1,
+                failed_payments_count=0,
+                risk_score=0.1
+            )
+            txn = Transaction(
+                id="txn_err_rzp",
+                customer_id=cust.id,
+                amount=500.0,
+                currency="INR",
+                status="FAILED",
+                payment_method="UPI",
+                failure_reason="UPI_TIMEOUT",
+                retry_count=0
+            )
+            db.add(cust)
+            db.add(txn)
+            db.commit()
+
+            res = client.post(f"/api/recovery/execute/{txn.id}?mode=TEST_MODE")
+            assert res.status_code == 200
+            assert res.json()["status"] == "FAILED"
+            assert "keys are unconfigured" in res.json()["message"]
+            db.close()
+
+
+def test_manual_approval_invalid_transitions():
+    """Verify manual approvals cannot be approved twice, rejected twice, or crossed."""
+    db = TestSession()
+    cust = Customer(
+        id="cust_app_test",
+        name="Approval Cust",
+        email="appr@domain.in",
+        phone="+919811223344",
+        lifetime_value=50000.0,
+        successful_payments_count=2,
+        failed_payments_count=0,
+        risk_score=0.1
+    )
+    txn = Transaction(
+        id="txn_app_test",
+        customer_id=cust.id,
+        amount=25000.0, # High value -> gated
+        currency="INR",
+        status="FAILED",
+        payment_method="UPI",
+        failure_reason="UPI_TIMEOUT",
+        retry_count=0
+    )
+    db.add(cust)
+    db.add(txn)
+    db.commit()
+
+    # Trigger action to PENDING_APPROVAL
+    res_exec = client.post(f"/api/recovery/execute/{txn.id}?mode=SIMULATION_MODE")
+    assert res_exec.status_code == 200
+    assert res_exec.json()["status"] == "REQUIRES_APPROVAL"
+    action_id = res_exec.json()["details"]["action_id"]
+    assert action_id is not None
+
+    # First approve should succeed
+    res_app1 = client.post(f"/api/recovery/approve/{action_id}")
+    assert res_app1.status_code == 200
+
+    # Second approve should return HTTP 400
+    res_app2 = client.post(f"/api/recovery/approve/{action_id}")
+    assert res_app2.status_code == 400
+
+    # Rejecting approved action should return HTTP 400
+    res_rej1 = client.post(f"/api/recovery/reject/{action_id}")
+    assert res_rej1.status_code == 400
+    db.close()
+
+
+def test_policy_engine_failsafe_default_error():
+    """Verify that when policy engine suffers an exception, failsafe defaults to STOP."""
+    db = TestSession()
+    txn = Transaction(
+        id="txn_fail_policy",
+        customer_id="cust_dummy",
+        amount=1000.0,
+        status="FAILED",
+        payment_method="UPI",
+        failure_reason="UPI_TIMEOUT"
+    )
+    # Pass None recommendation to cause AttributeError and trigger failsafe except block
+    res = policy_engine.evaluate(txn, None)
+    assert res.allowed is False
+    assert res.action == "STOP"
+    assert "Failsafe default" in res.reason
     db.close()
 
 

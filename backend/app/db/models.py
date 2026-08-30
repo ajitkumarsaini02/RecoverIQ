@@ -138,7 +138,6 @@ class RecoveryAction(Base):
     approved_by = Column(String(64), nullable=True)
     approved_at = Column(DateTime, nullable=True)
     rejection_reason = Column(String(256), nullable=True)
-    error_message = Column(Text, nullable=True)
     
     # Outcome
     recovered_amount = Column(Float, default=0.0, nullable=False)
@@ -166,7 +165,6 @@ class RecoveryAction(Base):
             "approved_by": self.approved_by,
             "approved_at": self.approved_at.isoformat() if self.approved_at else None,
             "rejection_reason": self.rejection_reason,
-            "error_message": self.error_message,
             "recovered_amount": self.recovered_amount,
             "execution_details": json.loads(self.execution_details_json) if self.execution_details_json else {},
             "mode": self.mode,

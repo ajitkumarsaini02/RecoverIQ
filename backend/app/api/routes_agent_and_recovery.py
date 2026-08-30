@@ -113,7 +113,10 @@ async def approve_action(action_id: str, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Recovery action not found")
 
     if act.status != "PENDING_APPROVAL":
-        return {"status": act.status, "message": f"Action is already in '{act.status}' status."}
+        raise HTTPException(
+            status_code=400,
+            detail=f"Action cannot be approved. Current status: '{act.status}' (must be PENDING_APPROVAL)."
+        )
 
     now = datetime.now(timezone.utc)
     act.approved_by = "Merchant Operator"
@@ -200,7 +203,10 @@ def reject_action(action_id: str, req: Optional[RejectRequest] = None, db: Sessi
         raise HTTPException(status_code=404, detail="Recovery action not found")
 
     if act.status != "PENDING_APPROVAL":
-        return {"status": act.status, "message": f"Action is already in '{act.status}' status."}
+        raise HTTPException(
+            status_code=400,
+            detail=f"Action cannot be rejected. Current status: '{act.status}' (must be PENDING_APPROVAL)."
+        )
 
     rejection_reason = req.reason if req and req.reason else "Merchant manually rejected recovery"
     now = datetime.now(timezone.utc)
@@ -235,9 +241,9 @@ class VerifyPaymentRequest(BaseModel):
     payment_id: Optional[str] = None
     razorpay_signature: Optional[str] = None
 
-@router.post("/recovery/verify/{transaction_id}")
+@router.post("/recovery/verify/{id_or_token}")
 async def verify_transaction_payment(
-    transaction_id: str,
+    id_or_token: str,
     req: Optional[VerifyPaymentRequest] = None,
     db: Session = Depends(get_db)
 ):
@@ -245,9 +251,23 @@ async def verify_transaction_payment(
     Independently verifies captured payment status on Razorpay Test API.
     Guarantees that a transaction is transitioned to RECOVERED only if Razorpay confirms capture.
     """
-    txn = db.query(Transaction).filter(Transaction.id == transaction_id).first()
+    # Check if id_or_token is an action_id
+    if id_or_token.startswith("act_"):
+        action = db.query(RecoveryAction).filter(RecoveryAction.id == id_or_token).first()
+        if not action:
+            raise HTTPException(status_code=404, detail="Recovery action not found")
+        transaction_id = action.transaction_id
+    else:
+        transaction_id = id_or_token
+
+    # Query transaction with database locking where supported (PostgreSQL)
+    query = db.query(Transaction)
+    if db.bind.dialect.name == "postgresql":
+        query = query.with_for_update()
+    txn = query.filter(Transaction.id == transaction_id).first()
+
     if not txn:
-        raise HTTPException(status_code=404, detail=f"Transaction '{transaction_id}' not found")
+        raise HTTPException(status_code=404, detail=f"Transaction with ID '{transaction_id}' not found")
 
     now = datetime.now(timezone.utc)
 
@@ -290,6 +310,10 @@ async def verify_transaction_payment(
         order_payments = await razorpay_service.fetch_order_payments(txn.razorpay_order_id)
         payments_to_check.extend(order_payments)
 
+    # Determine execution mode from recent recovery action or fallback
+    last_act = db.query(RecoveryAction).filter(RecoveryAction.transaction_id == txn.id).order_by(RecoveryAction.created_at.desc()).first()
+    mode = last_act.mode if last_act else "TEST_MODE"
+
     # Check for captured payment
     captured_pay = next((p for p in payments_to_check if p.get("status") == "captured"), None)
     if captured_pay:
@@ -299,25 +323,30 @@ async def verify_transaction_payment(
         txn.updated_at = now
 
         # Update or create recovery action
-        action_rec = RecoveryAction(
-            id=f"act_{uuid.uuid4().hex[:12]}",
-            transaction_id=txn.id,
-            action_type="VERIFIED_PAYMENT",
-            status="SUCCESS",
-            ai_diagnosis="Payment independently verified via Razorpay API",
-            ai_probability=1.0,
-            ai_risk_level="LOW",
-            ai_reasoning="Payment capture verified with gateway.",
-            policy_allowed=True,
-            policy_reasons_json="[]",
-            requires_human_approval=False,
-            recovered_amount=txn.amount,
-            execution_details_json=json.dumps(captured_pay),
-            mode="TEST_MODE",
-            created_at=now,
-            executed_at=now
-        )
-        db.add(action_rec)
+        if last_act and last_act.status != "SUCCESS":
+            last_act.status = "SUCCESS"
+            last_act.recovered_amount = txn.amount
+            last_act.executed_at = now
+        else:
+            action_rec = RecoveryAction(
+                id=f"act_{uuid.uuid4().hex[:12]}",
+                transaction_id=txn.id,
+                action_type="VERIFIED_PAYMENT",
+                status="SUCCESS",
+                ai_diagnosis="Payment independently verified via Razorpay API",
+                ai_probability=1.0,
+                ai_risk_level="LOW",
+                ai_reasoning="Payment capture verified with gateway.",
+                policy_allowed=True,
+                policy_reasons_json="[]",
+                requires_human_approval=False,
+                recovered_amount=txn.amount,
+                execution_details_json=json.dumps(captured_pay),
+                mode=mode,
+                created_at=now,
+                executed_at=now
+            )
+            db.add(action_rec)
 
         # Audit Event
         audit_service.log_payment_recovered(
@@ -325,7 +354,7 @@ async def verify_transaction_payment(
             transaction_id=txn.id,
             amount_recovered=txn.amount,
             payment_id=pay_id,
-            mode="TEST_MODE"
+            mode=mode
         )
         db.commit()
 
@@ -344,25 +373,29 @@ async def verify_transaction_payment(
         txn.status = "FAILED"
         txn.updated_at = now
 
-        action_rec = RecoveryAction(
-            id=f"act_{uuid.uuid4().hex[:12]}",
-            transaction_id=txn.id,
-            action_type="VERIFIED_PAYMENT",
-            status="FAILED",
-            ai_diagnosis="Payment failed on Razorpay gateway",
-            ai_probability=0.0,
-            ai_risk_level="HIGH",
-            ai_reasoning=failed_pay.get("error_description", "Payment failed"),
-            policy_allowed=True,
-            policy_reasons_json="[]",
-            requires_human_approval=False,
-            recovered_amount=0.0,
-            execution_details_json=json.dumps(failed_pay),
-            mode="TEST_MODE",
-            created_at=now,
-            executed_at=now
-        )
-        db.add(action_rec)
+        if last_act and last_act.status != "SUCCESS":
+            last_act.status = "FAILED"
+            last_act.executed_at = now
+        else:
+            action_rec = RecoveryAction(
+                id=f"act_{uuid.uuid4().hex[:12]}",
+                transaction_id=txn.id,
+                action_type="VERIFIED_PAYMENT",
+                status="FAILED",
+                ai_diagnosis="Payment failed on Razorpay gateway",
+                ai_probability=0.0,
+                ai_risk_level="HIGH",
+                ai_reasoning=failed_pay.get("error_description", "Payment failed"),
+                policy_allowed=True,
+                policy_reasons_json="[]",
+                requires_human_approval=False,
+                recovered_amount=0.0,
+                execution_details_json=json.dumps(failed_pay),
+                mode=mode,
+                created_at=now,
+                executed_at=now
+            )
+            db.add(action_rec)
 
         audit_service.log_recovery_failed(
             db=db,

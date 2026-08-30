@@ -43,161 +43,176 @@ class DeterministicPolicyEngine:
     VALID_ACTIONS = {"RETRY_PAYMENT", "PAYMENT_LINK", "ALTERNATIVE_PAYMENT_METHOD", "REMINDER", "HUMAN_ESCALATION", "STOP"}
 
     def evaluate(self, transaction: Transaction, recommendation: AIAgentRecommendation) -> PolicyEvaluationResult:
-        rules_evaluated: List[PolicyRuleResult] = []
-        reasons: List[str] = []
-        action = recommendation.recommended_action
-        requires_human_approval = recommendation.requires_human_approval
-        allowed = True
+        try:
+            rules_evaluated: List[PolicyRuleResult] = []
+            reasons: List[str] = []
+            action = recommendation.recommended_action
+            requires_human_approval = recommendation.requires_human_approval
+            allowed = True
 
-        # Pre-check: Invalid / Unrecognized Action -> Safe STOP
-        if action not in self.VALID_ACTIONS:
-            allowed = False
-            action = "STOP"
-            reason_msg = f"Invalid or unrecognized recommended action '{recommendation.recommended_action}'. Policy overridden to safe STOP."
-            reasons.append(reason_msg)
-            rules_evaluated.append(PolicyRuleResult(
-                rule_id="RULE_VALID_ACTION",
-                description="Enforce valid policy recovery action enumeration",
-                passed=False,
-                reason=reason_msg
-            ))
-
-        # Rule 1: Maximum 2 Automatic Retry Attempts (Ceiling)
-        if action == "RETRY_PAYMENT" and (transaction.retry_count or 0) >= self.MAX_RETRIES:
-            allowed = False
-            action = "STOP"
-            reason_msg = f"Exceeded maximum automated retry limit ({self.MAX_RETRIES} allowed, {transaction.retry_count} attempted). Action overridden to STOP."
-            reasons.append(reason_msg)
-            rules_evaluated.append(PolicyRuleResult(
-                rule_id="RULE_MAX_RETRIES",
-                description="Enforce ceiling of 2 automatic retries",
-                passed=False,
-                reason=reason_msg
-            ))
-        else:
-            rules_evaluated.append(PolicyRuleResult(
-                rule_id="RULE_MAX_RETRIES",
-                description="Enforce ceiling of 2 automatic retries",
-                passed=True,
-                reason=f"Current retries ({transaction.retry_count or 0}) is within limit ({self.MAX_RETRIES})."
-            ))
-
-        # Rule 2: High-Value Transaction Gate (>= ₹20,000)
-        if transaction.amount >= self.HIGH_VALUE_THRESHOLD:
-            requires_human_approval = True
-            reason_msg = f"Transaction amount ₹{transaction.amount:,.0f} exceeds high-value threshold (₹{self.HIGH_VALUE_THRESHOLD:,.0f}). Mandatory merchant approval required."
-            reasons.append(reason_msg)
-            rules_evaluated.append(PolicyRuleResult(
-                rule_id="RULE_HIGH_VALUE_GATE",
-                description="High-value payments require human approval",
-                passed=False, # Triggered approval gate
-                reason=reason_msg
-            ))
-        else:
-            rules_evaluated.append(PolicyRuleResult(
-                rule_id="RULE_HIGH_VALUE_GATE",
-                description="High-value payments require human approval",
-                passed=True,
-                reason=f"Amount ₹{transaction.amount:,.0f} is within automated recovery limit."
-            ))
-
-        # Rule 3: Repeated Failures -> STOP Condition
-        if (transaction.previous_failed_payments or 0) >= 3 and (transaction.retry_count or 0) >= 1:
-            allowed = False
-            action = "STOP"
-            reason_msg = f"Customer has high repeat failure frequency ({transaction.previous_failed_payments} prior failures). Action converted to STOP."
-            reasons.append(reason_msg)
-            rules_evaluated.append(PolicyRuleResult(
-                rule_id="RULE_REPEATED_FAILURES",
-                description="Halt recovery on chronic repeat failure histories",
-                passed=False,
-                reason=reason_msg
-            ))
-        else:
-            rules_evaluated.append(PolicyRuleResult(
-                rule_id="RULE_REPEATED_FAILURES",
-                description="Halt recovery on chronic repeat failure histories",
-                passed=True,
-                reason="Customer failure history is within safe thresholds."
-            ))
-
-        # Rule 4: Very Low Recovery Probability -> STOP
-        if recommendation.recovery_probability < self.LOW_PROBABILITY_THRESHOLD:
-            action = "STOP"
-            allowed = False
-            reason_msg = f"Recovery probability ({recommendation.recovery_probability:.1%}) is below minimum floor ({self.LOW_PROBABILITY_THRESHOLD:.1%}). Payment marked STOP."
-            reasons.append(reason_msg)
-            rules_evaluated.append(PolicyRuleResult(
-                rule_id="RULE_MIN_PROBABILITY",
-                description="Stop recovery when probability is below 25%",
-                passed=False,
-                reason=reason_msg
-            ))
-        else:
-            rules_evaluated.append(PolicyRuleResult(
-                rule_id="RULE_MIN_PROBABILITY",
-                description="Stop recovery when probability is below 25%",
-                passed=True,
-                reason=f"Recovery probability ({recommendation.recovery_probability:.1%}) satisfies minimum threshold."
-            ))
-
-        # Rule 5: Cooldown Window for Immediate Retries
-        if action == "RETRY_PAYMENT" and transaction.last_recovery_attempt_at:
-            time_since_last = datetime.now(timezone.utc) - transaction.last_recovery_attempt_at.replace(tzinfo=timezone.utc)
-            if time_since_last < timedelta(seconds=self.COOLDOWN_SECONDS):
+            # Pre-check: Invalid / Unrecognized Action -> Safe STOP
+            if action not in self.VALID_ACTIONS:
                 allowed = False
-                action = "REMINDER"
-                reason_msg = f"Retry attempted {int(time_since_last.total_seconds())}s ago (cooldown is {self.COOLDOWN_SECONDS}s). Converted to scheduled reminder."
+                action = "STOP"
+                reason_msg = f"Invalid or unrecognized recommended action '{recommendation.recommended_action}'. Policy overridden to safe STOP."
                 reasons.append(reason_msg)
                 rules_evaluated.append(PolicyRuleResult(
-                    rule_id="RULE_COOLDOWN_WINDOW",
-                    description="Prevent rapid back-to-back retries without cooldown",
+                    rule_id="RULE_VALID_ACTION",
+                    description="Enforce valid policy recovery action enumeration",
+                    passed=False,
+                    reason=reason_msg
+                ))
+
+            # Rule 1: Maximum 2 Automatic Retry Attempts (Ceiling)
+            if action == "RETRY_PAYMENT" and (transaction.retry_count or 0) >= self.MAX_RETRIES:
+                allowed = False
+                action = "STOP"
+                reason_msg = f"Exceeded maximum automated retry limit ({self.MAX_RETRIES} allowed, {transaction.retry_count} attempted). Action overridden to STOP."
+                reasons.append(reason_msg)
+                rules_evaluated.append(PolicyRuleResult(
+                    rule_id="RULE_MAX_RETRIES",
+                    description="Enforce ceiling of 2 automatic retries",
                     passed=False,
                     reason=reason_msg
                 ))
             else:
                 rules_evaluated.append(PolicyRuleResult(
+                    rule_id="RULE_MAX_RETRIES",
+                    description="Enforce ceiling of 2 automatic retries",
+                    passed=True,
+                    reason=f"Current retries ({transaction.retry_count or 0}) is within limit ({self.MAX_RETRIES})."
+                ))
+
+            # Rule 2: High-Value Transaction Gate (>= ₹20,000)
+            if transaction.amount >= self.HIGH_VALUE_THRESHOLD:
+                requires_human_approval = True
+                reason_msg = f"Transaction amount ₹{transaction.amount:,.0f} exceeds high-value threshold (₹{self.HIGH_VALUE_THRESHOLD:,.0f}). Mandatory merchant approval required."
+                reasons.append(reason_msg)
+                rules_evaluated.append(PolicyRuleResult(
+                    rule_id="RULE_HIGH_VALUE_GATE",
+                    description="High-value payments require human approval",
+                    passed=False, # Triggered approval gate
+                    reason=reason_msg
+                ))
+            else:
+                rules_evaluated.append(PolicyRuleResult(
+                    rule_id="RULE_HIGH_VALUE_GATE",
+                    description="High-value payments require human approval",
+                    passed=True,
+                    reason=f"Amount ₹{transaction.amount:,.0f} is within automated recovery limit."
+                ))
+
+            # Rule 3: Repeated Failures -> STOP Condition
+            if (transaction.previous_failed_payments or 0) >= 3 and (transaction.retry_count or 0) >= 1:
+                allowed = False
+                action = "STOP"
+                reason_msg = f"Customer has high repeat failure frequency ({transaction.previous_failed_payments} prior failures). Action converted to STOP."
+                reasons.append(reason_msg)
+                rules_evaluated.append(PolicyRuleResult(
+                    rule_id="RULE_REPEATED_FAILURES",
+                    description="Halt recovery on chronic repeat failure histories",
+                    passed=False,
+                    reason=reason_msg
+                ))
+            else:
+                rules_evaluated.append(PolicyRuleResult(
+                    rule_id="RULE_REPEATED_FAILURES",
+                    description="Halt recovery on chronic repeat failure histories",
+                    passed=True,
+                    reason="Customer failure history is within safe thresholds."
+                ))
+
+            # Rule 4: Very Low Recovery Probability -> STOP
+            if recommendation.recovery_probability < self.LOW_PROBABILITY_THRESHOLD:
+                action = "STOP"
+                allowed = False
+                reason_msg = f"Recovery probability ({recommendation.recovery_probability:.1%}) is below minimum floor ({self.LOW_PROBABILITY_THRESHOLD:.1%}). Payment marked STOP."
+                reasons.append(reason_msg)
+                rules_evaluated.append(PolicyRuleResult(
+                    rule_id="RULE_MIN_PROBABILITY",
+                    description="Stop recovery when probability is below 25%",
+                    passed=False,
+                    reason=reason_msg
+                ))
+            else:
+                rules_evaluated.append(PolicyRuleResult(
+                    rule_id="RULE_MIN_PROBABILITY",
+                    description="Stop recovery when probability is below 25%",
+                    passed=True,
+                    reason=f"Recovery probability ({recommendation.recovery_probability:.1%}) satisfies minimum threshold."
+                ))
+
+            # Rule 5: Cooldown Window for Immediate Retries
+            if action == "RETRY_PAYMENT" and transaction.last_recovery_attempt_at:
+                time_since_last = datetime.now(timezone.utc) - transaction.last_recovery_attempt_at.replace(tzinfo=timezone.utc)
+                if time_since_last < timedelta(seconds=self.COOLDOWN_SECONDS):
+                    allowed = False
+                    action = "REMINDER"
+                    reason_msg = f"Retry attempted {int(time_since_last.total_seconds())}s ago (cooldown is {self.COOLDOWN_SECONDS}s). Converted to scheduled reminder."
+                    reasons.append(reason_msg)
+                    rules_evaluated.append(PolicyRuleResult(
+                        rule_id="RULE_COOLDOWN_WINDOW",
+                        description="Prevent rapid back-to-back retries without cooldown",
+                        passed=False,
+                        reason=reason_msg
+                    ))
+                else:
+                    rules_evaluated.append(PolicyRuleResult(
+                        rule_id="RULE_COOLDOWN_WINDOW",
+                        description="Prevent rapid back-to-back retries without cooldown",
+                        passed=True,
+                        reason="Cooldown period satisfied."
+                    ))
+            else:
+                rules_evaluated.append(PolicyRuleResult(
                     rule_id="RULE_COOLDOWN_WINDOW",
                     description="Prevent rapid back-to-back retries without cooldown",
                     passed=True,
-                    reason="Cooldown period satisfied."
+                    reason="No active cooldown violation."
                 ))
-        else:
-            rules_evaluated.append(PolicyRuleResult(
-                rule_id="RULE_COOLDOWN_WINDOW",
-                description="Prevent rapid back-to-back retries without cooldown",
-                passed=True,
-                reason="No active cooldown violation."
-            ))
 
-        # Rule 6: Risky Actions / High Risk Level -> HUMAN APPROVAL
-        if recommendation.risk_level == "HIGH" and action != "STOP":
-            requires_human_approval = True
-            reason_msg = "High risk assessment identified by AI engine. Gating for human operator review."
-            reasons.append(reason_msg)
-            rules_evaluated.append(PolicyRuleResult(
-                rule_id="RULE_HIGH_RISK_GATE",
-                description="High risk actions require human operator confirmation",
-                passed=False,
-                reason=reason_msg
-            ))
-        else:
-            rules_evaluated.append(PolicyRuleResult(
-                rule_id="RULE_HIGH_RISK_GATE",
-                description="High risk actions require human operator confirmation",
-                passed=True,
-                reason="Risk level within automated policy tolerance."
-            ))
+            # Rule 6: Risky Actions / High Risk Level -> HUMAN APPROVAL
+            if recommendation.risk_level == "HIGH" and action != "STOP":
+                requires_human_approval = True
+                reason_msg = "High risk assessment identified by AI engine. Gating for human operator review."
+                reasons.append(reason_msg)
+                rules_evaluated.append(PolicyRuleResult(
+                    rule_id="RULE_HIGH_RISK_GATE",
+                    description="High risk actions require human operator confirmation",
+                    passed=False,
+                    reason=reason_msg
+                ))
+            else:
+                rules_evaluated.append(PolicyRuleResult(
+                    rule_id="RULE_HIGH_RISK_GATE",
+                    description="High risk actions require human operator confirmation",
+                    passed=True,
+                    reason="Risk level within automated policy tolerance."
+                ))
 
-        primary_reason = reasons[0] if reasons else "All deterministic safety guardrails passed successfully."
+            primary_reason = reasons[0] if reasons else "All deterministic safety guardrails passed successfully."
 
-        return PolicyEvaluationResult(
-            allowed=allowed,
-            action=action,
-            requires_human_approval=requires_human_approval,
-            reason=primary_reason,
-            reasons=reasons,
-            rules_evaluated=rules_evaluated
-        )
+            return PolicyEvaluationResult(
+                allowed=allowed,
+                action=action,
+                requires_human_approval=requires_human_approval,
+                reason=primary_reason,
+                reasons=reasons,
+                rules_evaluated=rules_evaluated
+            )
+        except Exception as e:
+            return PolicyEvaluationResult(
+                allowed=False,
+                action="STOP",
+                requires_human_approval=False,
+                reason=f"Failsafe default: Policy evaluation error ({str(e)}). Action overridden to STOP.",
+                reasons=[f"Error: {str(e)}"],
+                rules_evaluated=[PolicyRuleResult(
+                    rule_id="RULE_FAILSAFE_DEFAULT",
+                    description="Failsafe default protection on evaluation error",
+                    passed=False,
+                    reason=str(e)
+                )]
+            )
 
 policy_engine = DeterministicPolicyEngine()

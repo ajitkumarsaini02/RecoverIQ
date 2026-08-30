@@ -191,15 +191,15 @@ def test_duplicate_approve_and_state_guards():
     res1 = client.post(f"/api/recovery/approve/{act_id}")
     assert res1.status_code == 200
 
-    # 2. Duplicate Approve -> Safely handled
+    # 2. Duplicate Approve -> Safely rejected with HTTP 400
     res2 = client.post(f"/api/recovery/approve/{act_id}")
-    assert res2.status_code == 200
-    assert "already" in res2.json()["message"].lower()
+    assert res2.status_code == 400
+    assert "cannot be approved" in res2.json()["detail"].lower()
 
-    # 3. Reject after Approve -> Safely handled
+    # 3. Reject after Approve -> Safely rejected with HTTP 400
     res3 = client.post(f"/api/recovery/reject/{act_id}", json={"reason": "Late rejection attempt"})
-    assert res3.status_code == 200
-    assert "already" in res3.json()["message"].lower()
+    assert res3.status_code == 400
+    assert "cannot be rejected" in res3.json()["detail"].lower()
 
     # 4. Invalid Action ID -> 404
     res4 = client.post("/api/recovery/approve/act_non_existent_999")

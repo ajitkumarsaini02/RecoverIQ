@@ -409,7 +409,7 @@ export const RecoveryPlayground: React.FC = () => {
                         ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
                         : 'bg-purple-500/20 text-purple-300 border-purple-500/40'
                     }`}>
-                      {result.mode === 'TEST_MODE' ? 'Razorpay Test Mode' : 'Simulation Sandbox'}
+                      {result.mode === 'TEST_MODE' ? 'Razorpay Test Mode' : 'SIMULATED RECOVERY'}
                     </span>
                     {result.ai_analysis.model_used && (
                       <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-blue-500/10 text-blue-300 border border-blue-500/30">
@@ -426,7 +426,7 @@ export const RecoveryPlayground: React.FC = () => {
               {result.recovery_result.recovered_amount > 0 && (
                 <div className="p-3 rounded-xl bg-surface-base border border-emerald-500/30 text-right shrink-0">
                   <span className="text-[11px] font-mono text-slate-400 uppercase block">
-                    {result.mode === 'TEST_MODE' ? 'Revenue Captured' : 'Revenue Recovered (Simulated)'}
+                    {result.mode === 'TEST_MODE' ? 'Revenue Captured' : 'Simulated Revenue'}
                   </span>
                   <span className="text-2xl font-extrabold text-emerald-400">
                     +₹{result.recovery_result.recovered_amount.toLocaleString('en-IN')}

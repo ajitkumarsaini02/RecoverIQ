@@ -34,8 +34,8 @@ export const SimulationView: React.FC = () => {
         <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-4 sm:gap-6">
           <div className="max-w-2xl">
             <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 mb-1.5 sm:mb-2">
-              <span className="px-2.5 py-0.5 rounded-full text-[10px] sm:text-[11px] font-mono font-semibold bg-purple-500/20 text-purple-300 border border-purple-500/40">
-                1,000+ Transaction Engine
+              <span className="px-2.5 py-0.5 rounded-full text-[10px] sm:text-[11px] font-mono font-semibold bg-purple-600/30 text-purple-200 border border-purple-500/40 shadow-sm animate-pulse">
+                🔮 SIMULATED RECOVERY SANDBOX
               </span>
               <span className="px-2.5 py-0.5 rounded-full text-[10px] sm:text-[11px] font-mono font-semibold bg-brand-500/10 text-brand-300 border border-brand-500/30">
                 PORTFOLIO BATCH RECOVERY
@@ -110,7 +110,7 @@ export const SimulationView: React.FC = () => {
               </div>
 
               <div className="p-4 rounded-xl bg-surface-base border border-emerald-500/40">
-                <span className="text-[10px] font-mono text-emerald-400 uppercase block">Recovered</span>
+                <span className="text-[10px] font-mono text-emerald-400 uppercase block">Simulated Revenue</span>
                 <span className="text-lg font-bold text-emerald-400">
                   +₹{(simResult.revenue_recovered || 0).toLocaleString('en-IN')}
                 </span>

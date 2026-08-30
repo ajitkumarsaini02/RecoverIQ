@@ -13,13 +13,15 @@ from app.services.seed_service import seed_database
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    # Startup: Ensure tables exist and seed initial synthetic data if empty
+    # Startup: Ensure tables exist
     Base.metadata.create_all(bind=engine)
-    db = SessionLocal()
-    try:
-        seed_database(db=db, customer_count=350, transaction_count=1200, force_reseed=False)
-    finally:
-        db.close()
+    # Only seed database automatically if not in production and not running PostgreSQL
+    if settings.ENVIRONMENT != "production" and not settings.DATABASE_URL.startswith("postgresql") and not settings.DATABASE_URL.startswith("postgres"):
+        db = SessionLocal()
+        try:
+            seed_database(db=db, customer_count=350, transaction_count=1200, force_reseed=False)
+        finally:
+            db.close()
     yield
 
 app = FastAPI(
@@ -30,9 +32,16 @@ app = FastAPI(
 )
 
 # Configure CORS - Enable cross-origin API access for Vercel, Render and local development
+cors_origins = settings.cors_origins_list
+if settings.ENVIRONMENT == "development" or "*" in cors_origins:
+    allow_origins = ["*"]
+else:
+    allow_origins = cors_origins
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=allow_origins,
+    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )

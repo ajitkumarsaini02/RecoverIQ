@@ -43,9 +43,9 @@ class AIAgentRecommendation(BaseModel):
     risk_level: RiskLevelType = Field(description="Risk assessment: LOW, MEDIUM, HIGH")
     reason: str = Field(description="Explainable customer context reasoning grounding the decision")
     requires_human_approval: bool = Field(description="Whether merchant operator approval is recommended")
-    mode: str = Field(default="DEMO_FALLBACK", description="LIVE_LLM or DEMO_FALLBACK")
-    model_used: str = Field(default="DEMO / Rule-Based Expert Fallback", description="Identifier of the reasoning model")
-    fallback_used: bool = Field(default=True, description="Whether DEMO fallback mode was engaged")
+    mode: str = Field(default="HEURISTIC_FALLBACK", description="GEMINI or HEURISTIC_FALLBACK")
+    model_used: str = Field(default="RecoverIQ Expert Heuristics Engine", description="Identifier of the reasoning model")
+    fallback_used: bool = Field(default=True, description="Whether fallback mode was engaged")
 
     @field_validator("recovery_probability")
     def validate_probability(cls, v):
@@ -229,7 +229,10 @@ class RecoveryAIAgent:
                     fallback_used=False
                 )
         except Exception as e:
-            logger.warning(f"Gemini API execution error ({type(e).__name__}): {e}")
+            err_msg = str(e)
+            if settings.GEMINI_API_KEY:
+                err_msg = err_msg.replace(settings.GEMINI_API_KEY, "REDACTED_API_KEY")
+            logger.warning(f"Gemini API execution error ({type(e).__name__}): {err_msg}")
             return None
 
     def _call_openai_api(self, ctx: AIAnalysisInput) -> Optional[AIAgentRecommendation]:

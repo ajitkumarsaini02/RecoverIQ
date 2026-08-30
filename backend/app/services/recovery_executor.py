@@ -56,8 +56,11 @@ class RecoveryExecutionService:
             now = datetime.now(timezone.utc)
             now_iso = now.isoformat()
 
-            # Refresh transaction from DB
-            db.refresh(transaction)
+            # Refresh transaction from DB with locking where supported (PostgreSQL)
+            query = db.query(Transaction)
+            if db.bind.dialect.name == "postgresql":
+                query = query.with_for_update()
+            transaction = query.filter(Transaction.id == transaction.id).first()
 
             # Idempotency Guard 1: Already recovered
             if transaction.status == "RECOVERED":
@@ -315,8 +318,7 @@ class RecoveryExecutionService:
                         policy_reasons_json=json.dumps(policy_res.reasons),
                         requires_human_approval=False,
                         recovered_amount=0.0,
-                        error_message=str(error_msg),
-                        execution_details_json=json.dumps(order_data),
+                        execution_details_json=json.dumps({"order_data": order_data, "error": str(error_msg)}),
                         mode="TEST_MODE",
                         created_at=now,
                         executed_at=now

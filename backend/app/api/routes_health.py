@@ -25,7 +25,7 @@ def get_health():
             },
             "database": {
                 "status": "CONNECTED",
-                "engine": "SQLite (SQLAlchemy 2.0)"
+                "engine": "PostgreSQL (SQLAlchemy 2.0)" if settings.DATABASE_URL.startswith("postgresql") or settings.DATABASE_URL.startswith("postgres") else "SQLite (SQLAlchemy 2.0)"
             }
         }
     }

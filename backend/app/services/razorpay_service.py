@@ -64,6 +64,14 @@ class RazorpayService:
         notes_payload = notes or {"source": "RecoverIQ Revenue Recovery"}
         requested_mode = force_mode or self.current_mode_label
 
+        if requested_mode == "TEST_MODE":
+            if not self.is_live_test_mode:
+                return {
+                    "error": "Razorpay keys are unconfigured or placeholder values, but TEST_MODE was requested.",
+                    "mode": "TEST_MODE",
+                    "status": "failed"
+                }
+
         if requested_mode == "TEST_MODE" and self.is_live_test_mode:
             try:
                 async with httpx.AsyncClient(timeout=12.0) as client:
@@ -129,6 +137,14 @@ class RazorpayService:
         amount_paise = int(round(amount_in_inr * 100))
         phone = customer_phone or "+919876543210"
         requested_mode = force_mode or self.current_mode_label
+
+        if requested_mode == "TEST_MODE":
+            if not self.is_live_test_mode:
+                return {
+                    "error": "Razorpay keys are unconfigured or placeholder values, but TEST_MODE was requested.",
+                    "mode": "TEST_MODE",
+                    "status": "failed"
+                }
 
         if requested_mode == "TEST_MODE" and self.is_live_test_mode:
             try:
@@ -197,7 +213,14 @@ class RazorpayService:
         if not payment_id:
             return {"status": "not_found", "mode": self.current_mode_label}
 
-        if self.is_live_test_mode and not payment_id.startswith("pay_sim_"):
+        if self.is_live_test_mode:
+            if payment_id.startswith("pay_sim_"):
+                return {
+                    "status": "failed",
+                    "error": "Cannot fetch simulated payment in live TEST_MODE",
+                    "mode": "TEST_MODE",
+                    "captured": False
+                }
             try:
                 async with httpx.AsyncClient(timeout=10.0) as client:
                     response = await client.get(
@@ -208,18 +231,32 @@ class RazorpayService:
                         data = response.json()
                         data["mode"] = "TEST_MODE"
                         return data
+                    else:
+                        return {
+                            "status": "failed",
+                            "error": f"Razorpay API returned HTTP {response.status_code}",
+                            "mode": "TEST_MODE",
+                            "captured": False
+                        }
             except Exception as e:
                 logger.error(f"Error checking payment {payment_id}: {e}")
+                return {
+                    "status": "failed",
+                    "error": str(e),
+                    "mode": "TEST_MODE",
+                    "captured": False
+                }
 
-        # Simulation Fallback
+        # Simulation Sandbox Mode
+        is_sim_captured = payment_id.startswith("pay_sim_") or payment_id.startswith("pay_captured_")
         return {
             "id": payment_id,
             "entity": "payment",
             "amount": 499900,
             "currency": "INR",
-            "status": "captured",
+            "status": "captured" if is_sim_captured else "failed",
             "method": "upi",
-            "captured": True,
+            "captured": is_sim_captured,
             "mode": "SIMULATION_MODE"
         }
 

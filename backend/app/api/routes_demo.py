@@ -429,8 +429,7 @@ async def run_scenario(request: DemoScenarioRequest, db: Session = Depends(get_d
                         policy_reasons_json=json.dumps(policy_res.reasons),
                         requires_human_approval=False,
                         recovered_amount=0.0,
-                        error_message=str(error_msg),
-                        execution_details_json=json.dumps(order_result),
+                        execution_details_json=json.dumps({"order_result": order_result, "error": str(error_msg)}),
                         mode="TEST_MODE",
                         created_at=now + timedelta(milliseconds=500),
                         executed_at=now + timedelta(milliseconds=700)
@@ -544,8 +543,7 @@ async def run_scenario(request: DemoScenarioRequest, db: Session = Depends(get_d
                     policy_reasons_json=json.dumps(policy_res.reasons),
                     requires_human_approval=False,
                     recovered_amount=0.0,
-                    error_message=str(error_msg),
-                    execution_details_json=json.dumps(plink),
+                    execution_details_json=json.dumps({"payment_link": plink, "error": str(error_msg)}),
                     mode=exec_mode,
                     created_at=now + timedelta(milliseconds=500),
                     executed_at=now + timedelta(milliseconds=700)

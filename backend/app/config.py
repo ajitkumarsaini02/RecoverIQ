@@ -16,7 +16,7 @@ class Settings(BaseSettings):
     # Razorpay Test Mode
     RAZORPAY_KEY_ID: str = ""
     RAZORPAY_KEY_SECRET: str = ""
-    RAZORPAY_WEBHOOK_SECRET: str = ""
+    RAZORPAY_WEBHOOK_SECRET: str = "whsec_dummy"
     
     # AI Engine
     LLM_PROVIDER: str = "gemini"

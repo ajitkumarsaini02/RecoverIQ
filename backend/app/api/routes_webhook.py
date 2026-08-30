@@ -26,22 +26,20 @@ async def handle_razorpay_webhook(
     """
     body_bytes = await request.body()
     
-    # Signature verification
-    if settings.RAZORPAY_WEBHOOK_SECRET:
-        if not x_razorpay_signature:
-            logger.warning("Razorpay webhook received without X-Razorpay-Signature header.")
-            raise HTTPException(status_code=400, detail="Missing X-Razorpay-Signature header")
-        
-        is_valid = razorpay_service.verify_webhook_signature(
-            payload_body=body_bytes,
-            signature=x_razorpay_signature,
-            secret=settings.RAZORPAY_WEBHOOK_SECRET
-        )
-        if not is_valid:
-            logger.error("Razorpay webhook signature verification failed.")
-            raise HTTPException(status_code=400, detail="Invalid webhook signature")
-    else:
-        logger.info("RAZORPAY_WEBHOOK_SECRET not configured, processing in permissive test mode.")
+    # Unconditional Signature verification
+    if not x_razorpay_signature:
+        logger.warning("Razorpay webhook received without X-Razorpay-Signature header.")
+        raise HTTPException(status_code=400, detail="Missing X-Razorpay-Signature header")
+    
+    webhook_secret = settings.RAZORPAY_WEBHOOK_SECRET or "whsec_dummy"
+    is_valid = razorpay_service.verify_webhook_signature(
+        payload_body=body_bytes,
+        signature=x_razorpay_signature,
+        secret=webhook_secret
+    )
+    if not is_valid:
+        logger.error("Razorpay webhook signature verification failed.")
+        raise HTTPException(status_code=400, detail="Invalid webhook signature")
 
     try:
         payload = json.loads(body_bytes.decode("utf-8"))
@@ -62,14 +60,18 @@ async def handle_razorpay_webhook(
         payment_id = payment_obj.get("id")
         amount = float(payment_obj.get("amount", 0) or order_obj.get("amount_paid", 0) or order_obj.get("amount", 0)) / 100.0
 
-        # Find matching transaction by order_id or notes
+        # Find matching transaction by order_id or notes with database locking where supported (PostgreSQL)
+        txn_query = db.query(Transaction)
+        if db.bind.dialect.name == "postgresql":
+            txn_query = txn_query.with_for_update()
+
         txn = None
         if order_id:
-            txn = db.query(Transaction).filter(Transaction.razorpay_order_id == order_id).first()
+            txn = txn_query.filter(Transaction.razorpay_order_id == order_id).first()
         if not txn and payment_obj.get("notes", {}).get("transaction_id"):
-            txn = db.query(Transaction).filter(Transaction.id == payment_obj["notes"]["transaction_id"]).first()
+            txn = txn_query.filter(Transaction.id == payment_obj["notes"]["transaction_id"]).first()
         if not txn and order_obj.get("notes", {}).get("transaction_id"):
-            txn = db.query(Transaction).filter(Transaction.id == order_obj["notes"]["transaction_id"]).first()
+            txn = txn_query.filter(Transaction.id == order_obj["notes"]["transaction_id"]).first()
 
         if txn:
             # Idempotency check: only recover if not already recovered
@@ -94,12 +96,13 @@ async def handle_razorpay_webhook(
                     order_id=order_id
                 )
 
+                mode = act.mode if act else "TEST_MODE"
                 audit_service.log_payment_recovered(
                     db=db,
                     transaction_id=txn.id,
                     amount_recovered=amount or txn.amount,
                     payment_id=payment_id,
-                    mode="TEST_MODE"
+                    mode=mode
                 )
                 db.commit()
                 logger.info(f"Transaction {txn.id} marked RECOVERED via webhook {event_type}.")
@@ -118,13 +121,18 @@ async def handle_razorpay_webhook(
         payment_id = payment_obj.get("id")
         amount = float(plink_obj.get("amount", 0)) / 100.0
 
+        # Find matching transaction by short_url or notes with database locking where supported (PostgreSQL)
+        txn_query = db.query(Transaction)
+        if db.bind.dialect.name == "postgresql":
+            txn_query = txn_query.with_for_update()
+
         txn = None
         if plink_obj.get("short_url"):
-            txn = db.query(Transaction).filter(Transaction.razorpay_payment_link == plink_obj["short_url"]).first()
+            txn = txn_query.filter(Transaction.razorpay_payment_link == plink_obj["short_url"]).first()
         if not txn and plink_id:
-            txn = db.query(Transaction).filter(Transaction.razorpay_payment_link.contains(plink_id)).first()
+            txn = txn_query.filter(Transaction.razorpay_payment_link.contains(plink_id)).first()
         if not txn and plink_obj.get("notes", {}).get("transaction_id"):
-            txn = db.query(Transaction).filter(Transaction.id == plink_obj["notes"]["transaction_id"]).first()
+            txn = txn_query.filter(Transaction.id == plink_obj["notes"]["transaction_id"]).first()
 
         if txn:
             if txn.status != "RECOVERED":
@@ -148,12 +156,13 @@ async def handle_razorpay_webhook(
                     order_id=None
                 )
 
+                mode = act.mode if act else "TEST_MODE"
                 audit_service.log_payment_recovered(
                     db=db,
                     transaction_id=txn.id,
                     amount_recovered=amount or txn.amount,
                     payment_id=payment_id,
-                    mode="TEST_MODE"
+                    mode=mode
                 )
                 db.commit()
                 logger.info(f"Transaction {txn.id} marked RECOVERED via payment_link.paid.")
