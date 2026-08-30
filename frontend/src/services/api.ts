@@ -120,13 +120,31 @@ export async function runSimulation(): Promise<any> {
 }
 
 export async function runDemoScenario(scenarioKey: string): Promise<DemoScenarioResult> {
-  const res = await fetch(`${API_BASE}/demo/scenario`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ scenario: scenarioKey }),
-  });
-  if (!res.ok) throw new Error(`Failed to run scenario ${scenarioKey}`);
-  return res.json();
+  try {
+    const res = await fetch(`${API_BASE}/demo/scenario`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ scenario: scenarioKey, scenario_id: scenarioKey }),
+    });
+    if (!res.ok) {
+      const errText = await res.text();
+      let errorMsg = `Server error ${res.status}`;
+      try {
+        const parsed = JSON.parse(errText);
+        errorMsg = parsed.detail || parsed.message || errorMsg;
+      } catch {
+        if (errText) errorMsg = errText;
+      }
+      throw new Error(errorMsg);
+    }
+    return res.json();
+  } catch (err: any) {
+    console.error(`[RecoverIQ Error] Failed to run scenario ${scenarioKey}:`, err);
+    if (err.name === 'TypeError' && err.message?.toLowerCase().includes('fetch')) {
+      throw new Error('Unable to connect to RecoverIQ backend. Please verify that the backend API is online.');
+    }
+    throw err;
+  }
 }
 
 export async function reseedDatabase(): Promise<any> {

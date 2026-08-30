@@ -126,8 +126,10 @@ export const RecoveryPlayground: React.FC = () => {
         setRunning(false);
       }, 2000);
     } catch (err: any) {
-      setError(err.message || 'Failed to execute demo scenario');
+      console.error('[RecoveryPlayground] Execution error:', err);
+      setError(err.message || 'Unable to connect to RecoverIQ backend.');
       setRunning(false);
+      setStepIndex(0);
     }
   };
 
