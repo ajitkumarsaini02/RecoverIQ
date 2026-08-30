@@ -1,3 +1,4 @@
+import logging
 import uuid
 import json
 from datetime import datetime, timezone, timedelta
@@ -5,6 +6,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from pydantic import BaseModel, Field
 from typing import Optional, Dict, Any, List
+
+logger = logging.getLogger(__name__)
 
 from app.db.session import get_db
 from app.db.models import Customer, Transaction, RecoveryAction, AuditEvent

@@ -190,10 +190,13 @@ class RazorpayService:
             "mode": "SIMULATION_MODE"
         }
 
-    async def fetch_payment(self, payment_id: str) -> Dict[str, Any]:
+    async def fetch_payment(self, payment_id: Optional[str] = None) -> Dict[str, Any]:
         """
         Fetches payment details directly from Razorpay Test API.
         """
+        if not payment_id:
+            return {"status": "not_found", "mode": self.current_mode_label}
+
         if self.is_live_test_mode and not payment_id.startswith("pay_sim_"):
             try:
                 async with httpx.AsyncClient(timeout=10.0) as client:
@@ -220,10 +223,13 @@ class RazorpayService:
             "mode": "SIMULATION_MODE"
         }
 
-    async def fetch_order_payments(self, order_id: str) -> List[Dict[str, Any]]:
+    async def fetch_order_payments(self, order_id: Optional[str] = None) -> List[Dict[str, Any]]:
         """
         Fetches all payments associated with a Razorpay Order to verify capture.
         """
+        if not order_id:
+            return []
+
         if self.is_live_test_mode and not order_id.startswith("order_sim_"):
             try:
                 async with httpx.AsyncClient(timeout=10.0) as client:
