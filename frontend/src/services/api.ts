@@ -120,12 +120,16 @@ export async function runSimulation(): Promise<any> {
 }
 
 export async function runDemoScenario(scenarioKey: string): Promise<DemoScenarioResult> {
+  const url = `${API_BASE}/demo/scenario`;
+  const payload = { scenario: scenarioKey, scenario_id: scenarioKey };
+  console.log(`[RecoverIQ Network] Dispatching POST ${url}`, payload);
   try {
-    const res = await fetch(`${API_BASE}/demo/scenario`, {
+    const res = await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ scenario: scenarioKey, scenario_id: scenarioKey }),
+      body: JSON.stringify(payload),
     });
+    console.log(`[RecoverIQ Network] POST ${url} status:`, res.status);
     if (!res.ok) {
       const errText = await res.text();
       let errorMsg = `Server error ${res.status}`;

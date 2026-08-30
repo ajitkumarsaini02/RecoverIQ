@@ -12,7 +12,7 @@ import {
   Activity,
   Zap
 } from 'lucide-react';
-import { runDemoScenario } from '../services/api';
+import { runDemoScenario, API_BASE } from '../services/api';
 import { DemoScenarioResult } from '../types';
 
 interface PresetScenarioCard {
@@ -106,13 +106,20 @@ export const RecoveryPlayground: React.FC = () => {
   const selectedScenario = PRESET_SCENARIOS.find((s) => s.id === selectedScenarioId) || PRESET_SCENARIOS[0];
 
   const handleRunScenario = async () => {
+    console.log("[RecoverIQ] Run Scenario clicked");
+    console.log("[RecoverIQ] Selected scenario:", selectedScenarioId);
+    console.log("[RecoverIQ] API URL:", API_BASE);
+    console.log("[RecoverIQ] Sending scenario request");
+
     try {
       setRunning(true);
       setError(null);
       setResult(null);
       setStepIndex(1); // Step 1: Payment Attempt
 
-      const data = await runDemoScenario(selectedScenarioId);
+      const scenarioToRun = selectedScenarioId || 'temporary_upi_failure';
+      const data = await runDemoScenario(scenarioToRun);
+      console.log("[RecoverIQ] Scenario execution successful:", data);
       
       // Animate through all 7 pipeline steps smoothly for execution visibility
       setTimeout(() => setStepIndex(2), 250); // Step 2: Gateway Failure
@@ -126,7 +133,7 @@ export const RecoveryPlayground: React.FC = () => {
         setRunning(false);
       }, 2000);
     } catch (err: any) {
-      console.error('[RecoveryPlayground] Execution error:', err);
+      console.error('[RecoverIQ] Scenario execution failed:', err);
       setError(err.message || 'Unable to connect to RecoverIQ backend.');
       setRunning(false);
       setStepIndex(0);
@@ -155,6 +162,7 @@ export const RecoveryPlayground: React.FC = () => {
           </div>
 
           <button
+            type="button"
             onClick={handleRunScenario}
             disabled={running}
             className="px-6 py-3.5 rounded-xl bg-gradient-to-r from-brand-600 to-emerald-500 hover:from-brand-500 hover:to-emerald-400 text-white font-bold text-sm shadow-xl shadow-brand-500/25 flex items-center justify-center gap-2.5 transition-all transform active:scale-95 disabled:opacity-50 shrink-0 cursor-pointer"
