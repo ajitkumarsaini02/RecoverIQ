@@ -27,7 +27,6 @@ class Settings(BaseSettings):
         origins = [origin.strip() for origin in self.CORS_ORIGINS.split(",") if origin.strip()]
         if self.FRONTEND_URL and self.FRONTEND_URL.strip():
             origins.append(self.FRONTEND_URL.strip().rstrip("/"))
-        # Remove duplicates while preserving order
         seen = set()
         unique_origins = []
         for o in origins:
