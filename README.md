@@ -74,29 +74,29 @@ DASHBOARD & AUDIT TRAIL (Dynamic SQLite Analytics & Immutable Compliance Log)
 ## 🏛️ 3. System Architecture
 
 ```mermaid
-graph TD
-    subgraph Merchant Interface
-        User([Merchant / Operator]) --> FE[React 18 + TypeScript + Tailwind Frontend]
+flowchart TD
+    subgraph Client["Merchant Interface"]
+        User["Merchant Operator / Dashboard"] --> FE["React 18 + TypeScript + Tailwind Frontend"]
     end
 
-    subgraph Backend Core (FastAPI)
-        FE -->|REST API| API[FastAPI Routers]
-        API --> AgentSvc[AI Agent Service - Pydantic v2]
-        API --> PolicyEng[Deterministic Policy Engine]
-        API --> RecovEng[Recovery Execution Engine]
-        API --> AuditSvc[Audit Trail Service]
-        API --> SimEng[Batch Portfolio Simulation Engine]
-        API --> RazorpaySvc[Razorpay Test Mode Layer]
+    subgraph Backend["FastAPI Backend Core"]
+        FE --> API["FastAPI REST Routers"]
+        API --> AgentSvc["AI Agent Service (Pydantic v2)"]
+        API --> PolicyEng["Deterministic Policy Engine"]
+        API --> RecovEng["Recovery Execution Engine"]
+        API --> AuditSvc["Audit Trail Service"]
+        API --> SimEng["Batch Portfolio Simulation Engine"]
+        API --> RazorpaySvc["Razorpay Test Mode Abstraction"]
     end
 
-    subgraph Storage Layer
-        API --> DB[(SQLite / SQLAlchemy 2.0 DB)]
+    subgraph Storage["Database Layer"]
+        API --> DB[("SQLite Database (SQLAlchemy 2.0)")]
         AuditSvc --> DB
     end
 
-    subgraph External Gateways
-        AgentSvc -->|Structured Reasoning| AIModel[LLM Provider / Heuristic Fallback]
-        RazorpaySvc -->|Test Mode / Simulation| RzpAPI[Razorpay Test Gateway]
+    subgraph Gateways["External Services & Gateways"]
+        AgentSvc --> AIModel["LLM Provider / Heuristics Engine"]
+        RazorpaySvc --> RzpAPI["Razorpay Test Gateway"]
     end
 ```
 
