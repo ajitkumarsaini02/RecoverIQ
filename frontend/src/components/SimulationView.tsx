@@ -26,25 +26,25 @@ export const SimulationView: React.FC = () => {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       {/* Header Banner */}
-      <div className="p-6 rounded-2xl glass-panel border border-surface-border relative overflow-hidden">
+      <div className="p-4 sm:p-6 rounded-2xl glass-panel border border-surface-border relative overflow-hidden">
         <div className="absolute top-0 right-0 w-96 h-96 bg-purple-500/10 rounded-full blur-3xl pointer-events-none" />
 
-        <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+        <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-4 sm:gap-6">
           <div className="max-w-2xl">
-            <div className="flex items-center gap-2 mb-2">
-              <span className="px-2.5 py-0.5 rounded-full text-[11px] font-mono font-semibold bg-purple-500/20 text-purple-300 border border-purple-500/40">
-                1,000+ Transaction Portfolio Engine
+            <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 mb-1.5 sm:mb-2">
+              <span className="px-2.5 py-0.5 rounded-full text-[10px] sm:text-[11px] font-mono font-semibold bg-purple-500/20 text-purple-300 border border-purple-500/40">
+                1,000+ Transaction Engine
               </span>
-              <span className="px-2.5 py-0.5 rounded-full text-[11px] font-mono font-semibold bg-brand-500/10 text-brand-300 border border-brand-500/30">
+              <span className="px-2.5 py-0.5 rounded-full text-[10px] sm:text-[11px] font-mono font-semibold bg-brand-500/10 text-brand-300 border border-brand-500/30">
                 PORTFOLIO BATCH RECOVERY
               </span>
             </div>
-            <h2 className="text-2xl font-bold tracking-tight text-white">
+            <h2 className="text-xl sm:text-2xl font-bold tracking-tight text-white">
               Recovery Analytics
             </h2>
-            <p className="text-sm text-slate-300 mt-1">
+            <p className="text-xs sm:text-sm text-slate-300 mt-1">
               Analyze and batch-recover unrecovered failed transactions across the merchant portfolio using autonomous AI assessment and policy engine safety controls.
             </p>
           </div>
@@ -52,7 +52,7 @@ export const SimulationView: React.FC = () => {
           <button
             onClick={handleRunSimulation}
             disabled={running}
-            className="px-6 py-3.5 rounded-xl bg-gradient-to-r from-purple-600 to-brand-600 hover:from-purple-500 hover:to-brand-500 text-white font-bold text-sm shadow-xl shadow-purple-500/25 flex items-center justify-center gap-2.5 transition-all transform active:scale-95 disabled:opacity-50 shrink-0 cursor-pointer"
+            className="px-5 sm:px-6 py-3 sm:py-3.5 rounded-xl bg-gradient-to-r from-purple-600 to-brand-600 hover:from-purple-500 hover:to-brand-500 text-white font-bold text-xs sm:text-sm shadow-xl shadow-purple-500/25 flex items-center justify-center gap-2 transition-all transform active:scale-95 disabled:opacity-50 shrink-0 cursor-pointer w-full sm:w-auto"
           >
             <Sparkles className={`h-4 w-4 ${running ? 'animate-spin' : ''}`} />
             <span>{running ? 'Evaluating Batch Portfolio Recovery...' : 'Run Recovery Analytics'}</span>

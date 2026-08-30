@@ -110,19 +110,19 @@ export const ApprovalQueue: React.FC = () => {
                 key={item.id}
                 className="p-6 rounded-2xl glass-panel border border-amber-500/30 space-y-4 relative overflow-hidden"
               >
-                <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-                  <div className="flex items-start gap-3.5">
-                    <div className="h-10 w-10 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400 shrink-0">
-                      <ShieldAlert className="h-5 w-5" />
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
+                  <div className="flex items-start gap-3">
+                    <div className="h-9 w-9 sm:h-10 sm:w-10 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400 shrink-0">
+                      <ShieldAlert className="h-4 w-4 sm:h-5 sm:w-5" />
                     </div>
                     <div>
                       <div className="flex items-center gap-2">
                         <span className="text-xs font-mono text-slate-400">{item.transaction_id}</span>
-                        <span className="text-[10px] font-mono font-semibold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                        <span className="text-[9px] sm:text-[10px] font-mono font-semibold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/40">
                           HIGH-VALUE GATE
                         </span>
                       </div>
-                      <h3 className="text-lg font-bold text-white mt-0.5">
+                      <h3 className="text-base sm:text-lg font-bold text-white mt-0.5">
                         ₹{(item.transaction?.amount || 0).toLocaleString('en-IN')}{' '}
                         <span className="text-xs font-normal text-slate-400">
                           ({item.transaction?.customer_name || 'Customer'})
@@ -131,11 +131,11 @@ export const ApprovalQueue: React.FC = () => {
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-2.5 shrink-0">
+                  <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 sm:gap-2.5 w-full sm:w-auto shrink-0">
                     <button
                       onClick={() => handleReject(item.id)}
                       disabled={isProcessing}
-                      className="px-4 py-2 rounded-xl bg-surface-base border border-surface-border hover:border-red-500/50 text-red-400 hover:text-red-300 text-xs font-semibold flex items-center gap-1.5 transition-colors disabled:opacity-50"
+                      className="px-4 py-2 rounded-xl bg-surface-base border border-surface-border hover:border-red-500/50 text-red-400 hover:text-red-300 text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors disabled:opacity-50 cursor-pointer"
                     >
                       <XCircle className="h-4 w-4" />
                       <span>Reject & Halt</span>
@@ -143,10 +143,10 @@ export const ApprovalQueue: React.FC = () => {
                     <button
                       onClick={() => handleApprove(item.id)}
                       disabled={isProcessing}
-                      className="px-5 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-brand-500 hover:from-emerald-500 hover:to-brand-400 text-white text-xs font-bold shadow-lg shadow-brand-500/20 flex items-center gap-1.5 transition-all disabled:opacity-50"
+                      className="px-5 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-brand-500 hover:from-emerald-500 hover:to-brand-400 text-white text-xs font-bold shadow-lg shadow-brand-500/20 flex items-center justify-center gap-1.5 transition-all disabled:opacity-50 cursor-pointer"
                     >
                       <CheckCircle2 className="h-4 w-4" />
-                      <span>{isProcessing ? 'Executing...' : 'Approve & Execute Recovery'}</span>
+                      <span>{isProcessing ? 'Executing...' : 'Approve & Execute'}</span>
                     </button>
                   </div>
                 </div>

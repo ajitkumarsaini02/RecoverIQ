@@ -142,33 +142,33 @@ export const RecoveryPlayground: React.FC = () => {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       {/* Top Banner */}
-      <div className="p-6 rounded-2xl glass-panel relative overflow-hidden border border-surface-border">
+      <div className="p-4 sm:p-6 rounded-2xl glass-panel relative overflow-hidden border border-surface-border">
         <div className="absolute top-0 right-0 w-80 h-80 bg-gradient-to-br from-brand-500/10 to-blue-500/10 rounded-full blur-3xl pointer-events-none" />
         
-        <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+        <div className="relative z-10 flex flex-col lg:flex-row lg:items-center justify-between gap-4 sm:gap-6">
           <div className="max-w-2xl">
-            <div className="flex items-center gap-2 mb-2">
-              <span className="px-2.5 py-0.5 rounded-full text-[11px] font-mono font-semibold bg-brand-500/10 text-brand-300 border border-brand-500/30">
+            <div className="flex items-center gap-2 mb-1.5 sm:mb-2">
+              <span className="px-2.5 py-0.5 rounded-full text-[10px] sm:text-[11px] font-mono font-semibold bg-brand-500/10 text-brand-300 border border-brand-500/30">
                 Autonomous Pipeline
               </span>
             </div>
-            <h2 className="text-2xl font-bold tracking-tight text-white">
+            <h2 className="text-xl sm:text-2xl font-bold tracking-tight text-white">
               Autonomous Recovery
             </h2>
-            <p className="text-sm text-slate-300 mt-1">
+            <p className="text-xs sm:text-sm text-slate-300 mt-1">
               Intelligent payment recovery pipeline that analyzes failed transactions, evaluates recovery risk, applies policy guardrails, and executes the safest recovery action.
             </p>
           </div>
 
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 shrink-0">
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2.5 sm:gap-3 shrink-0">
             {/* Mode Switcher */}
-            <div className="flex p-1 rounded-xl bg-surface-base border border-surface-border">
+            <div className="flex p-1 rounded-xl bg-surface-base border border-surface-border justify-center">
               <button
                 type="button"
                 onClick={() => setExecutionMode('TEST_MODE')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-mono font-semibold transition-all cursor-pointer ${
+                className={`flex-1 sm:flex-initial px-2.5 sm:px-3 py-1.5 rounded-lg text-[11px] sm:text-xs font-mono font-semibold transition-all cursor-pointer text-center ${
                   executionMode === 'TEST_MODE'
                     ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 shadow-sm'
                     : 'text-slate-400 hover:text-slate-200'
@@ -179,7 +179,7 @@ export const RecoveryPlayground: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setExecutionMode('SIMULATION_MODE')}
-                className={`px-3 py-1.5 rounded-lg text-xs font-mono font-semibold transition-all cursor-pointer ${
+                className={`flex-1 sm:flex-initial px-2.5 sm:px-3 py-1.5 rounded-lg text-[11px] sm:text-xs font-mono font-semibold transition-all cursor-pointer text-center ${
                   executionMode === 'SIMULATION_MODE'
                     ? 'bg-purple-500/20 text-purple-300 border border-purple-500/40 shadow-sm'
                     : 'text-slate-400 hover:text-slate-200'
@@ -193,7 +193,7 @@ export const RecoveryPlayground: React.FC = () => {
               type="button"
               onClick={handleRunScenario}
               disabled={running}
-              className="px-6 py-3 rounded-xl bg-gradient-to-r from-brand-600 to-emerald-500 hover:from-brand-500 hover:to-emerald-400 text-white font-bold text-sm shadow-xl shadow-brand-500/25 flex items-center justify-center gap-2.5 transition-all transform active:scale-95 disabled:opacity-50 shrink-0 cursor-pointer"
+              className="px-5 sm:px-6 py-2.5 sm:py-3 rounded-xl bg-gradient-to-r from-brand-600 to-emerald-500 hover:from-brand-500 hover:to-emerald-400 text-white font-bold text-xs sm:text-sm shadow-xl shadow-brand-500/25 flex items-center justify-center gap-2 transition-all transform active:scale-95 disabled:opacity-50 shrink-0 cursor-pointer w-full sm:w-auto"
             >
               <Play className={`h-4 w-4 fill-white ${running ? 'animate-spin' : ''}`} />
               <span>{running ? 'Executing Recovery Pipeline...' : 'Run Scenario'}</span>
@@ -203,7 +203,7 @@ export const RecoveryPlayground: React.FC = () => {
       </div>
 
       {error && (
-        <div className="p-4 rounded-xl bg-red-950/40 border border-red-800/50 text-red-300 flex items-center gap-3 text-sm">
+        <div className="p-3.5 sm:p-4 rounded-xl bg-red-950/40 border border-red-800/50 text-red-300 flex items-center gap-3 text-xs sm:text-sm">
           <XCircle className="h-5 w-5 text-red-400 shrink-0" />
           <span>{error}</span>
         </div>
@@ -211,10 +211,10 @@ export const RecoveryPlayground: React.FC = () => {
 
       {/* Scenario Selector Grid */}
       <div>
-        <h3 className="text-xs font-mono uppercase tracking-wider text-slate-400 mb-3">
+        <h3 className="text-[11px] sm:text-xs font-mono uppercase tracking-wider text-slate-400 mb-2.5 sm:mb-3">
           RECOVERY SCENARIOS
         </h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2.5 sm:gap-3">
           {PRESET_SCENARIOS.map((s) => {
             const isSelected = selectedScenarioId === s.id;
             return (

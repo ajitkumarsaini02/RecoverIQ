@@ -51,17 +51,17 @@ export const DashboardView: React.FC = () => {
   const COLORS = ['#10b981', '#3b82f6', '#8b5cf6', '#f59e0b', '#ef4444', '#64748b'];
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       {/* Header & Controls */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
         <div>
           <div className="flex items-center gap-2">
-            <h2 className="text-xl font-bold tracking-tight text-white">Revenue Recovery Intelligence</h2>
-            <span className="px-2.5 py-0.5 rounded-full text-[11px] font-mono font-semibold bg-brand-500/10 text-brand-300 border border-brand-500/30">
+            <h2 className="text-lg sm:text-xl font-bold tracking-tight text-white">Revenue Recovery Intelligence</h2>
+            <span className="px-2 py-0.5 rounded-full text-[10px] sm:text-[11px] font-mono font-semibold bg-brand-500/10 text-brand-300 border border-brand-500/30">
               LIVE METRICS
             </span>
           </div>
-          <p className="text-xs text-slate-400 mt-1">
+          <p className="text-[11px] sm:text-xs text-slate-400 mt-1">
             Real-time financial recovery analytics computed dynamically across active transaction records.
           </p>
         </div>
@@ -69,7 +69,7 @@ export const DashboardView: React.FC = () => {
         <button
           onClick={loadData}
           disabled={loading}
-          className="px-3.5 py-2 rounded-xl bg-surface-card border border-surface-border text-xs font-mono text-slate-300 hover:text-white hover:border-slate-600 transition-colors flex items-center gap-2"
+          className="px-3 sm:px-3.5 py-2 rounded-xl bg-surface-card border border-surface-border text-xs font-mono text-slate-300 hover:text-white hover:border-slate-600 transition-colors flex items-center justify-center gap-2 cursor-pointer w-full sm:w-auto"
         >
           <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin text-brand-400' : ''}`} />
           <span>{loading ? 'Recalculating...' : 'Refresh Analytics'}</span>
@@ -77,123 +77,123 @@ export const DashboardView: React.FC = () => {
       </div>
 
       {error && (
-        <div className="p-4 rounded-xl bg-red-950/40 border border-red-800/50 text-red-300 text-xs">
+        <div className="p-3.5 sm:p-4 rounded-xl bg-red-950/40 border border-red-800/50 text-red-300 text-xs">
           {error}
         </div>
       )}
 
       {/* 8 Dynamic KPI Metric Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-4">
         {/* Card 1: Revenue at Risk */}
-        <div className="p-5 rounded-2xl glass-card border border-rose-900/40 relative overflow-hidden">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-mono text-slate-400 uppercase tracking-wider">Revenue at Risk</span>
-            <AlertTriangle className="h-4 w-4 text-rose-400" />
+        <div className="p-3.5 sm:p-5 rounded-2xl glass-card border border-rose-900/40 relative overflow-hidden">
+          <div className="flex items-center justify-between mb-1.5 sm:mb-2">
+            <span className="text-[10px] sm:text-xs font-mono text-slate-400 uppercase tracking-wider truncate">At Risk</span>
+            <AlertTriangle className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-rose-400 shrink-0" />
           </div>
-          <div className="text-2xl font-extrabold text-white tracking-tight">
+          <div className="text-lg sm:text-2xl font-extrabold text-white tracking-tight truncate">
             ₹{(metrics?.revenue_at_risk || 0).toLocaleString('en-IN')}
           </div>
-          <p className="text-[11px] text-slate-400 mt-1">
-            {metrics?.total_failed_count || 0} failed merchant transactions
+          <p className="text-[10px] sm:text-[11px] text-slate-400 mt-1 truncate">
+            {metrics?.total_failed_count || 0} failed txns
           </p>
         </div>
 
         {/* Card 2: Revenue Recovered */}
-        <div className="p-5 rounded-2xl glass-card border border-emerald-900/40 relative overflow-hidden">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-mono text-emerald-400 uppercase tracking-wider">Revenue Recovered</span>
-            <CheckCircle2 className="h-4 w-4 text-emerald-400" />
+        <div className="p-3.5 sm:p-5 rounded-2xl glass-card border border-emerald-900/40 relative overflow-hidden">
+          <div className="flex items-center justify-between mb-1.5 sm:mb-2">
+            <span className="text-[10px] sm:text-xs font-mono text-emerald-400 uppercase tracking-wider truncate">Recovered</span>
+            <CheckCircle2 className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-emerald-400 shrink-0" />
           </div>
-          <div className="text-2xl font-extrabold text-emerald-400 tracking-tight">
+          <div className="text-lg sm:text-2xl font-extrabold text-emerald-400 tracking-tight truncate">
             +₹{(metrics?.revenue_recovered || 0).toLocaleString('en-IN')}
           </div>
-          <div className="flex items-center gap-1 text-[11px] text-emerald-400/90 mt-1">
-            <ArrowUpRight className="h-3.5 w-3.5" />
-            <span>{metrics?.successful_recoveries_count || 0} recovered payments</span>
+          <div className="flex items-center gap-1 text-[10px] sm:text-[11px] text-emerald-400/90 mt-1 truncate">
+            <ArrowUpRight className="h-3 w-3 shrink-0" />
+            <span className="truncate">{metrics?.successful_recoveries_count || 0} recovered</span>
           </div>
         </div>
 
         {/* Card 3: Recovery Rate */}
-        <div className="p-5 rounded-2xl glass-card border border-brand-900/40 relative overflow-hidden">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-mono text-brand-300 uppercase tracking-wider">Recovery Rate</span>
-            <TrendingUp className="h-4 w-4 text-brand-400" />
+        <div className="p-3.5 sm:p-5 rounded-2xl glass-card border border-brand-900/40 relative overflow-hidden">
+          <div className="flex items-center justify-between mb-1.5 sm:mb-2">
+            <span className="text-[10px] sm:text-xs font-mono text-brand-300 uppercase tracking-wider truncate">Recovery Rate</span>
+            <TrendingUp className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-brand-400 shrink-0" />
           </div>
-          <div className="text-2xl font-extrabold text-brand-300 tracking-tight">
+          <div className="text-lg sm:text-2xl font-extrabold text-brand-300 tracking-tight">
             {metrics?.recovery_rate || 0}%
           </div>
-          <p className="text-[11px] text-slate-400 mt-1">
-            Avg: ₹{(metrics?.average_recovery_amount || 0).toLocaleString('en-IN')} / recovery
+          <p className="text-[10px] sm:text-[11px] text-slate-400 mt-1 truncate">
+            Avg: ₹{(metrics?.average_recovery_amount || 0).toLocaleString('en-IN')}
           </p>
         </div>
 
         {/* Card 4: Failed Payments */}
-        <div className="p-5 rounded-2xl glass-card border border-surface-border">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-mono text-slate-400 uppercase tracking-wider">Failed Payments</span>
-            <XCircle className="h-4 w-4 text-slate-400" />
+        <div className="p-3.5 sm:p-5 rounded-2xl glass-card border border-surface-border">
+          <div className="flex items-center justify-between mb-1.5 sm:mb-2">
+            <span className="text-[10px] sm:text-xs font-mono text-slate-400 uppercase tracking-wider truncate">Failures</span>
+            <XCircle className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-slate-400 shrink-0" />
           </div>
-          <div className="text-2xl font-extrabold text-white tracking-tight">
+          <div className="text-lg sm:text-2xl font-extrabold text-white tracking-tight">
             {metrics?.total_failed_count || 0}
           </div>
-          <p className="text-[11px] text-slate-400 mt-1">
-            Total failed transactions
+          <p className="text-[10px] sm:text-[11px] text-slate-400 mt-1 truncate">
+            Total failed txns
           </p>
         </div>
 
         {/* Card 5: Recovery Attempts */}
-        <div className="p-5 rounded-2xl glass-card border border-surface-border">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-mono text-slate-400 uppercase tracking-wider">Recovery Attempts</span>
-            <Layers className="h-4 w-4 text-blue-400" />
+        <div className="p-3.5 sm:p-5 rounded-2xl glass-card border border-surface-border">
+          <div className="flex items-center justify-between mb-1.5 sm:mb-2">
+            <span className="text-[10px] sm:text-xs font-mono text-slate-400 uppercase tracking-wider truncate">Attempts</span>
+            <Layers className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-blue-400 shrink-0" />
           </div>
-          <div className="text-2xl font-extrabold text-white tracking-tight">
+          <div className="text-lg sm:text-2xl font-extrabold text-white tracking-tight">
             {metrics?.recovery_attempts_count || 0}
           </div>
-          <p className="text-[11px] text-slate-400 mt-1">
-            Total recovery executions
+          <p className="text-[10px] sm:text-[11px] text-slate-400 mt-1 truncate">
+            Executions run
           </p>
         </div>
 
         {/* Card 6: Successful Recoveries */}
-        <div className="p-5 rounded-2xl glass-card border border-surface-border">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-mono text-slate-400 uppercase tracking-wider">Successful Recoveries</span>
-            <CheckCircle2 className="h-4 w-4 text-emerald-400" />
+        <div className="p-3.5 sm:p-5 rounded-2xl glass-card border border-surface-border">
+          <div className="flex items-center justify-between mb-1.5 sm:mb-2">
+            <span className="text-[10px] sm:text-xs font-mono text-slate-400 uppercase tracking-wider truncate">Successes</span>
+            <CheckCircle2 className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-emerald-400 shrink-0" />
           </div>
-          <div className="text-2xl font-extrabold text-white tracking-tight">
+          <div className="text-lg sm:text-2xl font-extrabold text-white tracking-tight">
             {metrics?.successful_recoveries_count || 0}
           </div>
-          <p className="text-[11px] text-slate-400 mt-1">
+          <p className="text-[10px] sm:text-[11px] text-slate-400 mt-1 truncate">
             Captured & verified
           </p>
         </div>
 
         {/* Card 7: Pending Approvals */}
-        <div className="p-5 rounded-2xl glass-card border border-amber-900/40">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-mono text-amber-400 uppercase tracking-wider">Pending Approvals</span>
-            <ShieldAlert className="h-4 w-4 text-amber-400" />
+        <div className="p-3.5 sm:p-5 rounded-2xl glass-card border border-amber-900/40">
+          <div className="flex items-center justify-between mb-1.5 sm:mb-2">
+            <span className="text-[10px] sm:text-xs font-mono text-amber-400 uppercase tracking-wider truncate">Approvals</span>
+            <ShieldAlert className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-amber-400 shrink-0" />
           </div>
-          <div className="text-2xl font-extrabold text-amber-400 tracking-tight">
+          <div className="text-lg sm:text-2xl font-extrabold text-amber-400 tracking-tight">
             {metrics?.pending_approvals_count || 0}
           </div>
-          <p className="text-[11px] text-slate-400 mt-1">
-            High-value gated payments
+          <p className="text-[10px] sm:text-[11px] text-slate-400 mt-1 truncate">
+            Gated payments
           </p>
         </div>
 
         {/* Card 8: Stopped Cases */}
-        <div className="p-5 rounded-2xl glass-card border border-surface-border">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-xs font-mono text-slate-400 uppercase tracking-wider">Stopped Cases</span>
-            <ShieldCheck className="h-4 w-4 text-slate-400" />
+        <div className="p-3.5 sm:p-5 rounded-2xl glass-card border border-surface-border">
+          <div className="flex items-center justify-between mb-1.5 sm:mb-2">
+            <span className="text-[10px] sm:text-xs font-mono text-slate-400 uppercase tracking-wider truncate">Stopped</span>
+            <ShieldCheck className="h-3.5 w-3.5 sm:h-4 sm:w-4 text-slate-400 shrink-0" />
           </div>
-          <div className="text-2xl font-extrabold text-slate-300 tracking-tight">
+          <div className="text-lg sm:text-2xl font-extrabold text-slate-300 tracking-tight">
             {metrics?.stopped_cases_count || 0}
           </div>
-          <p className="text-[11px] text-slate-400 mt-1">
-            Policy 2-retry limits enforced
+          <p className="text-[10px] sm:text-[11px] text-slate-400 mt-1 truncate">
+            Policy limit halts
           </p>
         </div>
       </div>

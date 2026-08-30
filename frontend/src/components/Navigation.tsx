@@ -22,12 +22,16 @@ interface NavigationProps {
   activeTab: NavTab;
   onSelectTab: (tab: NavTab) => void;
   pendingApprovalsCount?: number;
+  mobileOpen?: boolean;
+  onCloseMobile?: () => void;
 }
 
 export const Navigation: React.FC<NavigationProps> = ({ 
   activeTab, 
   onSelectTab, 
-  pendingApprovalsCount = 0 
+  pendingApprovalsCount = 0,
+  mobileOpen = false,
+  onCloseMobile
 }) => {
   const navItems = [
     {
@@ -76,8 +80,8 @@ export const Navigation: React.FC<NavigationProps> = ({
     },
   ];
 
-  return (
-    <aside className="w-64 border-r border-surface-border bg-surface-card/60 backdrop-blur-md flex flex-col justify-between shrink-0 p-4 min-h-[calc(100vh-4rem)]">
+  const navContent = (
+    <>
       <div className="space-y-1">
         <div className="px-3 py-2 text-[11px] font-mono font-semibold uppercase tracking-wider text-slate-400">
           Core Workflows
@@ -89,7 +93,7 @@ export const Navigation: React.FC<NavigationProps> = ({
             <button
               key={item.id}
               onClick={() => onSelectTab(item.id)}
-              className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-medium transition-all group ${
+              className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl text-sm font-medium transition-all group cursor-pointer ${
                 isActive
                   ? 'bg-gradient-to-r from-brand-600/20 to-blue-600/10 text-white border border-brand-500/30 shadow-sm shadow-brand-500/10'
                   : 'text-slate-300 hover:text-white hover:bg-surface-highlight/50'
@@ -97,15 +101,15 @@ export const Navigation: React.FC<NavigationProps> = ({
             >
               <div className="flex items-center gap-3">
                 <Icon
-                  className={`h-4 w-4 transition-colors ${
+                  className={`h-4 w-4 transition-colors shrink-0 ${
                     isActive ? 'text-brand-400' : 'text-slate-400 group-hover:text-slate-200'
                   }`}
                 />
-                <span>{item.label}</span>
+                <span className="truncate">{item.label}</span>
               </div>
               {item.badge && (
                 <span
-                  className={`text-[10px] font-mono px-2 py-0.5 rounded-md border font-semibold ${
+                  className={`text-[10px] font-mono px-2 py-0.5 rounded-md border font-semibold shrink-0 ${
                     item.badgeColor || 'bg-surface-base text-slate-400 border-surface-border'
                   }`}
                 >
@@ -118,7 +122,7 @@ export const Navigation: React.FC<NavigationProps> = ({
       </div>
 
       {/* Footer info */}
-      <div className="p-3 rounded-xl bg-surface-base/80 border border-surface-border/60 text-xs space-y-1">
+      <div className="p-3 rounded-xl bg-surface-base/80 border border-surface-border/60 text-xs space-y-1 mt-4">
         <div className="flex items-center justify-between">
           <span className="text-slate-400">Gateway:</span>
           <span className="font-semibold text-slate-200">Razorpay</span>
@@ -128,6 +132,30 @@ export const Navigation: React.FC<NavigationProps> = ({
           <span className="text-brand-400 font-semibold">Autonomous v1.0</span>
         </div>
       </div>
-    </aside>
+    </>
+  );
+
+  return (
+    <>
+      {/* Desktop Sidebar (hidden on mobile, visible md and up) */}
+      <aside className="hidden md:flex w-64 border-r border-surface-border bg-surface-card/60 backdrop-blur-md flex-col justify-between shrink-0 p-4 min-h-[calc(100vh-4rem)]">
+        {navContent}
+      </aside>
+
+      {/* Mobile Drawer Overlay */}
+      {mobileOpen && (
+        <div className="fixed inset-0 z-50 md:hidden flex">
+          {/* Backdrop */}
+          <div 
+            className="fixed inset-0 bg-black/70 backdrop-blur-sm animate-fadeIn"
+            onClick={onCloseMobile}
+          />
+          {/* Slide-out Drawer */}
+          <aside className="relative z-10 w-72 max-w-[80vw] bg-surface-card border-r border-surface-border p-4 flex flex-col justify-between h-full shadow-2xl animate-slideRight overflow-y-auto">
+            {navContent}
+          </aside>
+        </div>
+      )}
+    </>
   );
 };

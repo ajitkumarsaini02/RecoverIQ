@@ -223,8 +223,8 @@ export const AuditTrail: React.FC = () => {
                   onClick={() => setExpandedEventId(isExpanded ? null : ev.id)}
                   className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 cursor-pointer"
                 >
-                  <div className="flex items-center gap-3">
-                    <button className="text-slate-400 hover:text-white">
+                  <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+                    <button className="text-slate-400 hover:text-white shrink-0">
                       {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
                     </button>
 
@@ -239,7 +239,7 @@ export const AuditTrail: React.FC = () => {
                     </span>
 
                     {ev.decision && (
-                      <span className="text-[11px] font-mono text-brand-300 bg-brand-950/60 px-2 py-0.5 rounded border border-brand-800/40">
+                      <span className="text-[10px] sm:text-[11px] font-mono text-brand-300 bg-brand-950/60 px-2 py-0.5 rounded border border-brand-800/40 truncate max-w-[200px]">
                         {ev.decision}
                       </span>
                     )}

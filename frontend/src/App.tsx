@@ -18,6 +18,7 @@ export const App: React.FC = () => {
   const [pendingApprovalsCount, setPendingApprovalsCount] = useState<number>(0);
   const [loadingHealth, setLoadingHealth] = useState<boolean>(true);
   const [healthError, setHealthError] = useState<string | null>(null);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState<boolean>(false);
 
   const loadStatusAndApprovals = async () => {
     try {
@@ -49,24 +50,34 @@ export const App: React.FC = () => {
   }, [activeTab]);
 
   return (
-    <div className="min-h-screen flex flex-col bg-surface-base text-slate-100">
+    <div className="min-h-screen flex flex-col bg-surface-base text-slate-100 antialiased selection:bg-brand-500/30 selection:text-brand-200">
       <Topbar 
         status={systemStatus} 
         loading={loadingHealth} 
         onRefresh={loadStatusAndApprovals} 
-        onLogoClick={() => setActiveTab('playground')}
+        onLogoClick={() => {
+          setActiveTab('playground');
+          setMobileMenuOpen(false);
+        }}
+        mobileMenuOpen={mobileMenuOpen}
+        onToggleMobileMenu={() => setMobileMenuOpen(!mobileMenuOpen)}
       />
 
-      <div className="flex flex-1">
+      <div className="flex flex-1 relative overflow-hidden">
         <Navigation 
           activeTab={activeTab} 
-          onSelectTab={setActiveTab} 
-          pendingApprovalsCount={pendingApprovalsCount} 
+          onSelectTab={(tab) => {
+            setActiveTab(tab);
+            setMobileMenuOpen(false);
+          }} 
+          pendingApprovalsCount={pendingApprovalsCount}
+          mobileOpen={mobileMenuOpen}
+          onCloseMobile={() => setMobileMenuOpen(false)}
         />
 
-        <main className="flex-1 p-6 overflow-y-auto max-h-[calc(100vh-4rem)]">
+        <main className="flex-1 p-3 sm:p-5 lg:p-6 overflow-y-auto max-h-[calc(100vh-4rem)] w-full max-w-full">
           {healthError && (
-            <div className="mb-6 p-4 rounded-xl bg-red-950/40 border border-red-800/50 text-red-300 flex items-center gap-3 text-xs">
+            <div className="mb-4 sm:mb-6 p-3.5 sm:p-4 rounded-xl bg-red-950/40 border border-red-800/50 text-red-300 flex items-center gap-3 text-xs">
               <AlertCircle className="h-5 w-5 text-red-400 shrink-0" />
               <div>
                 <p className="font-semibold">Backend Connection Error</p>

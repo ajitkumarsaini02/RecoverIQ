@@ -54,39 +54,39 @@ export const TransactionDetailModal: React.FC<TransactionDetailModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-fadeIn">
-      <div className="bg-[#0f172a] border border-surface-border rounded-2xl w-full max-w-3xl max-h-[90vh] flex flex-col shadow-2xl overflow-hidden">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-2.5 sm:p-4 bg-black/80 backdrop-blur-sm animate-fadeIn">
+      <div className="bg-[#0f172a] border border-surface-border rounded-2xl w-full max-w-3xl max-h-[92vh] sm:max-h-[90vh] flex flex-col shadow-2xl overflow-hidden">
         {/* Header */}
-        <div className="px-6 py-4 border-b border-surface-border flex items-center justify-between bg-surface-card">
-          <div className="flex items-center gap-3">
-            <div className="h-10 w-10 rounded-xl bg-brand-500/10 border border-brand-500/20 flex items-center justify-center text-brand-400">
-              <CreditCard className="h-5 w-5" />
+        <div className="px-4 sm:px-6 py-3.5 sm:py-4 border-b border-surface-border flex items-center justify-between bg-surface-card">
+          <div className="flex items-center gap-2.5 sm:gap-3">
+            <div className="h-9 w-9 sm:h-10 sm:w-10 rounded-xl bg-brand-500/10 border border-brand-500/20 flex items-center justify-center text-brand-400 shrink-0">
+              <CreditCard className="h-4 w-4 sm:h-5 sm:w-5" />
             </div>
             <div>
-              <div className="flex items-center gap-2">
-                <span className="font-mono text-xs text-slate-400">{transaction.id}</span>
-                <span className={`text-[10px] font-mono font-semibold px-2 py-0.5 rounded-full border ${getStatusBadge(transaction.status)}`}>
+              <div className="flex items-center gap-1.5 sm:gap-2">
+                <span className="font-mono text-[11px] sm:text-xs text-slate-400">{transaction.id}</span>
+                <span className={`text-[9px] sm:text-[10px] font-mono font-semibold px-2 py-0.5 rounded-full border ${getStatusBadge(transaction.status)}`}>
                   {transaction.status}
                 </span>
               </div>
-              <h3 className="text-xl font-bold text-white">
+              <h3 className="text-lg sm:text-xl font-bold text-white">
                 ₹{transaction.amount.toLocaleString('en-IN')}
-                <span className="text-xs font-normal text-slate-400 ml-2">({transaction.payment_method})</span>
+                <span className="text-xs font-normal text-slate-400 ml-1.5 sm:ml-2">({transaction.payment_method})</span>
               </h3>
             </div>
           </div>
           <button
             onClick={onClose}
-            className="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors"
+            className="p-1.5 sm:p-2 rounded-lg text-slate-400 hover:text-white hover:bg-slate-800 transition-colors cursor-pointer shrink-0"
           >
             <X className="h-5 w-5" />
           </button>
         </div>
 
         {/* Content */}
-        <div className="p-6 overflow-y-auto space-y-6">
+        <div className="p-4 sm:p-6 overflow-y-auto space-y-4 sm:space-y-6">
           {/* Failure Context & Diagnostics */}
-          <div className="p-4 rounded-xl bg-surface-base border border-surface-border grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="p-3.5 sm:p-4 rounded-xl bg-surface-base border border-surface-border grid grid-cols-1 sm:grid-cols-3 gap-3 sm:gap-4">
             <div>
               <span className="text-xs text-slate-400 block mb-1">Failure Reason</span>
               <span className={`inline-block text-xs font-mono px-2.5 py-1 rounded-md border font-semibold ${getFailureReasonBadge(transaction.failure_reason)}`}>

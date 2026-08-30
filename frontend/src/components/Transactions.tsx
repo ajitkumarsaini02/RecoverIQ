@@ -270,8 +270,8 @@ export const Transactions: React.FC = () => {
 
       {/* Table Container */}
       <div className="rounded-xl glass-panel border border-surface-border overflow-hidden">
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
+        <div className="overflow-x-auto w-full">
+          <table className="w-full text-left border-collapse min-w-[720px]">
             <thead>
               <tr className="border-b border-surface-border bg-surface-card/90 text-[11px] font-mono uppercase tracking-wider text-slate-400">
                 <th className="py-3 px-4">Transaction ID</th>

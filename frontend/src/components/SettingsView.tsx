@@ -32,17 +32,17 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ status, onRefresh })
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
         <div>
-          <div className="flex items-center gap-2">
-            <h2 className="text-xl font-bold tracking-tight text-white">System & Integration Status</h2>
-            <span className="px-2.5 py-0.5 rounded-full text-[11px] font-mono font-semibold bg-brand-500/20 text-brand-300 border border-brand-500/30">
+          <div className="flex flex-wrap items-center gap-2">
+            <h2 className="text-lg sm:text-xl font-bold tracking-tight text-white">System & Integration Status</h2>
+            <span className="px-2.5 py-0.5 rounded-full text-[10px] sm:text-[11px] font-mono font-semibold bg-brand-500/20 text-brand-300 border border-brand-500/30">
               ENVIRONMENT: {status?.mode || 'SANDBOX'}
             </span>
           </div>
-          <p className="text-xs text-slate-400 mt-1">
+          <p className="text-[11px] sm:text-xs text-slate-400 mt-1">
             Integration configuration for Razorpay Test Mode, AI Reasoning Layer, and Database.
           </p>
         </div>
@@ -50,7 +50,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ status, onRefresh })
         <button
           onClick={handleTestPing}
           disabled={testingPing}
-          className="px-4 py-2 rounded-xl bg-surface-card border border-surface-border text-xs font-mono text-slate-200 hover:text-white hover:border-slate-600 transition-colors flex items-center gap-2"
+          className="px-4 py-2 rounded-xl bg-surface-card border border-surface-border text-xs font-mono text-slate-200 hover:text-white hover:border-slate-600 transition-colors flex items-center justify-center gap-2 cursor-pointer w-full sm:w-auto"
         >
           <RefreshCw className={`h-3.5 w-3.5 ${testingPing ? 'animate-spin text-brand-400' : ''}`} />
           <span>{testingPing ? 'Testing...' : 'Test Backend Connection'}</span>
