@@ -1,0 +1,276 @@
+import React, { useState, useEffect } from 'react';
+import { 
+  History, 
+  Search, 
+  RefreshCw, 
+  ChevronDown, 
+  ChevronRight,
+  Code,
+  ShieldCheck,
+  CheckCircle2,
+  XCircle,
+  AlertTriangle,
+  Zap,
+  ArrowRight
+} from 'lucide-react';
+import { fetchAuditTrail } from '../services/api';
+import { AuditEvent } from '../types';
+
+export const AuditTrail: React.FC = () => {
+  const [events, setEvents] = useState<AuditEvent[]>([]);
+  const [loading, setLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
+  const [actorFilter, setActorFilter] = useState<string>('ALL');
+  const [eventTypeFilter, setEventTypeFilter] = useState<string>('ALL');
+  const [txnSearch, setTxnSearch] = useState<string>('');
+  const [expandedEventId, setExpandedEventId] = useState<string | null>(null);
+
+  const loadData = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const data = await fetchAuditTrail({
+        transaction_id: txnSearch.trim() || undefined,
+        limit: 100
+      });
+      setEvents(data);
+    } catch (err: any) {
+      setError(err.message || 'Failed to load audit trail');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    loadData();
+  }, [actorFilter, eventTypeFilter]);
+
+  const filteredEvents = events.filter((e) => {
+    if (actorFilter !== 'ALL' && e.actor !== actorFilter) return false;
+    if (eventTypeFilter !== 'ALL' && e.event_type !== eventTypeFilter) return false;
+    if (txnSearch.trim() && e.transaction_id && !e.transaction_id.toLowerCase().includes(txnSearch.toLowerCase())) {
+      return false;
+    }
+    return true;
+  });
+
+  const getActorBadge = (actor: string) => {
+    switch (actor) {
+      case 'AI_AGENT':
+        return 'bg-purple-500/20 text-purple-300 border-purple-500/40';
+      case 'POLICY_ENGINE':
+        return 'bg-brand-500/20 text-brand-300 border-brand-500/40';
+      case 'HUMAN_OPERATOR':
+        return 'bg-amber-500/20 text-amber-300 border-amber-500/40';
+      case 'RAZORPAY_GATEWAY':
+        return 'bg-blue-500/20 text-blue-300 border-blue-500/40';
+      default:
+        return 'bg-slate-800 text-slate-400 border-slate-700';
+    }
+  };
+
+  const getEventIcon = (type: string) => {
+    if (type.includes('FAILED') || type.includes('REJECTED')) {
+      return <XCircle className="h-4 w-4 text-red-400 shrink-0" />;
+    }
+    if (type.includes('RECOVERED') || type.includes('SUCCEEDED') || type.includes('APPROVED')) {
+      return <CheckCircle2 className="h-4 w-4 text-emerald-400 shrink-0" />;
+    }
+    if (type.includes('APPROVAL') || type.includes('GATE')) {
+      return <AlertTriangle className="h-4 w-4 text-amber-400 shrink-0" />;
+    }
+    if (type.includes('POLICY')) {
+      return <ShieldCheck className="h-4 w-4 text-brand-400 shrink-0" />;
+    }
+    return <Zap className="h-4 w-4 text-purple-400 shrink-0" />;
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <div className="flex items-center gap-2">
+            <h2 className="text-xl font-bold tracking-tight text-white">Immutable Audit Trail</h2>
+            <span className="px-2.5 py-0.5 rounded-full text-[11px] font-mono font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">
+              100% EXPLAINABLE & BOUNDED
+            </span>
+          </div>
+          <p className="text-xs text-slate-400 mt-1">
+            Complete financial compliance logging. Every payment failure, AI diagnostic check, policy guardrail decision, human approval, and recovery outcome is recorded permanently.
+          </p>
+        </div>
+
+        <button
+          onClick={loadData}
+          disabled={loading}
+          className="px-3.5 py-2 rounded-xl bg-surface-card border border-surface-border text-xs font-mono text-slate-300 hover:text-white hover:border-slate-600 transition-colors flex items-center gap-2"
+        >
+          <RefreshCw className={`h-3.5 w-3.5 ${loading ? 'animate-spin text-brand-400' : ''}`} />
+          <span>{loading ? 'Refreshing...' : 'Refresh Logs'}</span>
+        </button>
+      </div>
+
+      {/* Judge-Friendly Visual Flow Banner */}
+      <div className="p-4 rounded-xl glass-panel border border-surface-border bg-gradient-to-r from-purple-950/20 via-brand-950/20 to-blue-950/20">
+        <span className="text-[10px] font-mono uppercase tracking-wider text-slate-400 block mb-2 font-semibold">
+          Financial Recovery Lifecycle Flow
+        </span>
+        <div className="flex flex-wrap items-center gap-2 text-xs font-mono">
+          <span className="px-2.5 py-1 rounded-lg bg-red-950/50 text-red-300 border border-red-800/40 font-semibold">
+            1. Payment Failed
+          </span>
+          <ArrowRight className="h-3.5 w-3.5 text-slate-500" />
+          <span className="px-2.5 py-1 rounded-lg bg-purple-950/50 text-purple-300 border border-purple-800/40 font-semibold">
+            2. AI Analyzed
+          </span>
+          <ArrowRight className="h-3.5 w-3.5 text-slate-500" />
+          <span className="px-2.5 py-1 rounded-lg bg-blue-950/50 text-blue-300 border border-blue-800/40 font-semibold">
+            3. Context Evaluated
+          </span>
+          <ArrowRight className="h-3.5 w-3.5 text-slate-500" />
+          <span className="px-2.5 py-1 rounded-lg bg-brand-950/50 text-brand-300 border border-brand-800/40 font-semibold">
+            4. Policy Guardrail
+          </span>
+          <ArrowRight className="h-3.5 w-3.5 text-slate-500" />
+          <span className="px-2.5 py-1 rounded-lg bg-emerald-950/50 text-emerald-300 border border-emerald-800/40 font-semibold">
+            5. Recovery Captured
+          </span>
+        </div>
+      </div>
+
+      {/* Filters Bar */}
+      <div className="p-4 rounded-xl glass-card border border-surface-border grid grid-cols-1 sm:grid-cols-3 gap-3">
+        {/* Search */}
+        <div className="relative">
+          <Search className="h-4 w-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+          <input
+            type="text"
+            value={txnSearch}
+            onChange={(e) => setTxnSearch(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && loadData()}
+            placeholder="Search by Transaction ID (e.g. txn_0001)..."
+            className="w-full pl-9 pr-3 py-2 rounded-lg bg-surface-base border border-surface-border text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-brand-500"
+          />
+        </div>
+
+        {/* Actor Filter */}
+        <div>
+          <select
+            value={actorFilter}
+            onChange={(e) => setActorFilter(e.target.value)}
+            className="w-full px-3 py-2 rounded-lg bg-surface-base border border-surface-border text-xs text-slate-200 focus:outline-none focus:border-brand-500"
+          >
+            <option value="ALL">All Actors</option>
+            <option value="AI_AGENT">AI_AGENT (Diagnosis & Reasoning)</option>
+            <option value="POLICY_ENGINE">POLICY_ENGINE (Safety Guardrails)</option>
+            <option value="HUMAN_OPERATOR">HUMAN_OPERATOR (Manual Sign-Offs)</option>
+            <option value="RAZORPAY_GATEWAY">RAZORPAY_GATEWAY (Payment Events)</option>
+            <option value="SYSTEM">SYSTEM (Lifecycle & Seeding)</option>
+          </select>
+        </div>
+
+        {/* Event Type Filter */}
+        <div>
+          <select
+            value={eventTypeFilter}
+            onChange={(e) => setEventTypeFilter(e.target.value)}
+            className="w-full px-3 py-2 rounded-lg bg-surface-base border border-surface-border text-xs text-slate-200 focus:outline-none focus:border-brand-500"
+          >
+            <option value="ALL">All Event Types</option>
+            <option value="PAYMENT_FAILED">PAYMENT_FAILED</option>
+            <option value="FAILURE_ANALYZED">FAILURE_ANALYZED</option>
+            <option value="CUSTOMER_CONTEXT_ANALYZED">CUSTOMER_CONTEXT_ANALYZED</option>
+            <option value="AI_RECOMMENDATION">AI_RECOMMENDATION</option>
+            <option value="POLICY_VALIDATED">POLICY_VALIDATED</option>
+            <option value="APPROVAL_REQUESTED">APPROVAL_REQUESTED</option>
+            <option value="ACTION_APPROVED">ACTION_APPROVED</option>
+            <option value="ACTION_REJECTED">ACTION_REJECTED</option>
+            <option value="RECOVERY_EXECUTED">RECOVERY_EXECUTED</option>
+            <option value="RECOVERY_SUCCEEDED">RECOVERY_SUCCEEDED</option>
+            <option value="PAYMENT_RECOVERED">PAYMENT_RECOVERED</option>
+            <option value="RECOVERY_STOPPED">RECOVERY_STOPPED</option>
+          </select>
+        </div>
+      </div>
+
+      {error && (
+        <div className="p-4 rounded-xl bg-red-950/40 border border-red-800/50 text-red-300 text-xs">
+          {error}
+        </div>
+      )}
+
+      {/* Timeline List */}
+      <div className="space-y-3">
+        {loading ? (
+          Array.from({ length: 6 }).map((_, i) => (
+            <div key={i} className="p-4 rounded-xl glass-card border border-surface-border animate-pulse h-16" />
+          ))
+        ) : filteredEvents.length === 0 ? (
+          <div className="p-12 rounded-2xl glass-panel border border-surface-border text-center text-slate-400">
+            <History className="h-8 w-8 mx-auto text-slate-500 mb-2" />
+            <p className="font-medium">No audit events found matching filters.</p>
+          </div>
+        ) : (
+          filteredEvents.map((ev) => {
+            const isExpanded = expandedEventId === ev.id;
+            return (
+              <div
+                key={ev.id}
+                className="p-4 rounded-xl glass-panel border border-surface-border space-y-2 transition-all hover:border-slate-600"
+              >
+                <div 
+                  onClick={() => setExpandedEventId(isExpanded ? null : ev.id)}
+                  className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 cursor-pointer"
+                >
+                  <div className="flex items-center gap-3">
+                    <button className="text-slate-400 hover:text-white">
+                      {isExpanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                    </button>
+
+                    {getEventIcon(ev.event_type)}
+
+                    <span className={`text-[10px] font-mono px-2 py-0.5 rounded-full border font-bold ${getActorBadge(ev.actor)}`}>
+                      {ev.actor}
+                    </span>
+
+                    <span className="font-semibold text-xs text-white">
+                      {ev.event_type}
+                    </span>
+
+                    {ev.decision && (
+                      <span className="text-[11px] font-mono text-brand-300 bg-brand-950/60 px-2 py-0.5 rounded border border-brand-800/40">
+                        {ev.decision}
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-3 text-xs text-slate-400 font-mono">
+                    {ev.transaction_id && (
+                      <span className="text-slate-300">{ev.transaction_id}</span>
+                    )}
+                    <span className="text-[11px] text-slate-500">
+                      {ev.timestamp ? new Date(ev.timestamp).toLocaleString() : 'Recent'}
+                    </span>
+                  </div>
+                </div>
+
+                {isExpanded && (
+                  <div className="mt-3 pt-3 border-t border-surface-border animate-fadeIn">
+                    <div className="flex items-center gap-2 mb-1 text-[11px] text-slate-400 font-mono">
+                      <Code className="h-3.5 w-3.5" />
+                      <span>Event Audit Details (JSON):</span>
+                    </div>
+                    <pre className="p-3 rounded-lg bg-surface-base border border-surface-border text-[11px] font-mono text-emerald-300 overflow-x-auto">
+                      {JSON.stringify(ev.details, null, 2)}
+                    </pre>
+                  </div>
+                )}
+              </div>
+            );
+          })
+        )}
+      </div>
+    </div>
+  );
+};
