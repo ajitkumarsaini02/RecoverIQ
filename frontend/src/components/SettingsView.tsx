@@ -7,6 +7,7 @@ import {
   CheckCircle2
 } from 'lucide-react';
 import { SystemStatus } from '../types';
+import { fetchHealth } from '../services/api';
 
 interface SettingsViewProps {
   status: SystemStatus | null;
@@ -20,8 +21,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ status, onRefresh })
   const handleTestPing = async () => {
     try {
       setTestingPing(true);
-      const res = await fetch('/api/health');
-      setPingSuccess(res.ok);
+      await fetchHealth();
+      setPingSuccess(true);
       onRefresh();
     } catch {
       setPingSuccess(false);

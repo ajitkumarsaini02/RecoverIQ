@@ -9,6 +9,7 @@ class Settings(BaseSettings):
     PORT: int = 8000
     HOST: str = "0.0.0.0"
     CORS_ORIGINS: str = "http://localhost:5173,http://localhost:3000,http://127.0.0.1:5173,http://127.0.0.1:5174"
+    FRONTEND_URL: str = ""
     
     # Database
     DATABASE_URL: str = "sqlite:///./recoveriq.db"
@@ -24,7 +25,17 @@ class Settings(BaseSettings):
 
     @property
     def cors_origins_list(self) -> List[str]:
-        return [origin.strip() for origin in self.CORS_ORIGINS.split(",") if origin.strip()]
+        origins = [origin.strip() for origin in self.CORS_ORIGINS.split(",") if origin.strip()]
+        if self.FRONTEND_URL and self.FRONTEND_URL.strip():
+            origins.append(self.FRONTEND_URL.strip().rstrip("/"))
+        # Remove duplicates while preserving order
+        seen = set()
+        unique_origins = []
+        for o in origins:
+            if o not in seen:
+                seen.add(o)
+                unique_origins.append(o)
+        return unique_origins
 
     @property
     def is_razorpay_configured(self) -> bool:

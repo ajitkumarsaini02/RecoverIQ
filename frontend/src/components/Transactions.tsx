@@ -11,7 +11,7 @@ import {
   Eye
 } from 'lucide-react';
 import { Transaction, FailureReason, TransactionStatus } from '../types';
-import { fetchTransactions, fetchTransactionById } from '../services/api';
+import { fetchTransactions, fetchTransactionById, reseedDatabase } from '../services/api';
 import { TransactionDetailModal } from './TransactionDetailModal';
 
 export const Transactions: React.FC = () => {
@@ -82,10 +82,8 @@ export const Transactions: React.FC = () => {
   const handleReseed = async () => {
     try {
       setReseeding(true);
-      const res = await fetch('/api/seed?force=true', { method: 'POST' });
-      if (res.ok) {
-        await loadData();
-      }
+      await reseedDatabase();
+      await loadData();
     } catch (err: any) {
       console.error('Failed to reseed:', err);
     } finally {

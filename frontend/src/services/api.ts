@@ -7,7 +7,19 @@ import {
   DemoScenarioResult
 } from '../types';
 
-const API_BASE = '/api';
+// Resolve API base URL dynamically:
+// In production (e.g. Vercel), uses VITE_API_URL if defined (e.g. "https://recoveriq-backend.onrender.com/api" or "https://recoveriq-backend.onrender.com")
+// In local development, falls back to '/api' for Vite reverse proxy
+const getApiBase = (): string => {
+  const envUrl = (import.meta as any).env?.VITE_API_URL;
+  if (!envUrl || envUrl.trim() === '') {
+    return '/api';
+  }
+  const cleanUrl = envUrl.trim().replace(/\/+$/, '');
+  return cleanUrl.endsWith('/api') ? cleanUrl : `${cleanUrl}/api`;
+};
+
+export const API_BASE = getApiBase();
 
 export async function fetchHealth(): Promise<SystemStatus> {
   const res = await fetch(`${API_BASE}/health`);
@@ -116,3 +128,12 @@ export async function runDemoScenario(scenarioKey: string): Promise<DemoScenario
   if (!res.ok) throw new Error(`Failed to run scenario ${scenarioKey}`);
   return res.json();
 }
+
+export async function reseedDatabase(): Promise<any> {
+  const res = await fetch(`${API_BASE}/seed?force=true`, {
+    method: 'POST',
+  });
+  if (!res.ok) throw new Error('Failed to reseed database');
+  return res.json();
+}
+
