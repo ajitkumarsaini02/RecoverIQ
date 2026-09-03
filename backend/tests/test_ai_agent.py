@@ -278,3 +278,30 @@ def test_gemini_timeout_and_error_fallback():
                 MockClient.return_value.__enter__.return_value = mock_client
                 rec = ai_agent._call_gemini_api(ctx)
                 assert rec is None # Safely returns None to trigger heuristic fallback
+                assert ai_agent.last_error_classification == "timeout/network = connectivity"
+
+def test_agent_diagnostics_and_fallback_reason():
+    from unittest.mock import patch, MagicMock
+    from app.config import settings
+    from app.services.ai_agent import ai_agent, AIAnalysisInput
+
+    # 1. When unconfigured
+    with patch.object(settings, "GEMINI_API_KEY", ""):
+        diag = ai_agent.get_diagnostics()
+        assert diag["status"] == "UNCONFIGURED"
+        assert diag["error_classification"] == "401/403 = authentication/configuration"
+
+    # 2. When configured and healthy
+    with patch.object(settings, "GEMINI_API_KEY", "healthy_key"):
+        with patch.object(settings, "LLM_PROVIDER", "gemini"):
+            mock_client = MagicMock()
+            mock_resp = MagicMock()
+            mock_resp.status_code = 200
+            mock_client.post.return_value = mock_resp
+            with patch("httpx.Client") as MockClient:
+                MockClient.return_value.__enter__.return_value = mock_client
+                diag = ai_agent.get_diagnostics()
+                assert diag["status"] == "HEALTHY"
+                assert diag["mode"] == "LIVE_LLM"
+                assert diag["error_classification"] is None
+

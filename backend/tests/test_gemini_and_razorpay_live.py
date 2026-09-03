@@ -537,10 +537,11 @@ def test_gemini_error_classification_and_safe_logging(caplog):
     with patch.object(settings, "GEMINI_API_KEY", secret_key):
         with patch.object(settings, "LLM_PROVIDER", "gemini"):
             for status_code, expected_log_phrase in [
-                (401, "authentication error"),
-                (404, "model unavailable or retired"),
-                (429, "rate limit or quota exceeded"),
-                (500, "Google API service unavailable"),
+                (401, "401/403 = authentication/configuration"),
+                (404, "404 = invalid model/endpoint"),
+                (429, "429 = rate limit"),
+                (400, "400 = bad request"),
+                (500, "500/503 = Gemini service error"),
             ]:
                 mock_client = MagicMock()
                 mock_resp = MagicMock()
