@@ -178,7 +178,7 @@ def test_api_agent_analyze_endpoint():
     assert "risk_level" in rec
     assert "reason" in rec
     assert "requires_human_approval" in rec
-    assert rec["mode"] in ["HEURISTIC_FALLBACK", "DEMO_FALLBACK", "GEMINI"]
+    assert rec["mode"] in ["HEURISTIC_FALLBACK", "DEMO_FALLBACK", "GEMINI", "LIVE_LLM"]
 
 def test_gemini_mocked_success_response():
     from unittest.mock import patch, MagicMock
@@ -242,9 +242,9 @@ def test_gemini_mocked_success_response():
                 assert rec.recovery_probability == 0.92
                 assert rec.recommended_action == "RETRY_PAYMENT"
                 assert rec.risk_level == "LOW"
-                assert rec.mode == "GEMINI"
+                assert rec.mode == "LIVE_LLM"
                 assert rec.fallback_used is False
-                assert "Gemini" in rec.model_used
+                assert "gemini" in rec.model_used.lower()
 
 def test_gemini_timeout_and_error_fallback():
     from unittest.mock import patch, MagicMock

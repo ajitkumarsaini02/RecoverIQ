@@ -1,8 +1,16 @@
+import os
+from pathlib import Path
+from typing import List, Any
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from typing import List
+
+BASE_DIR = Path(__file__).resolve().parent.parent
+ROOT_DIR = BASE_DIR.parent
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+    model_config = SettingsConfigDict(
+        env_file=(str(ROOT_DIR / ".env"), str(BASE_DIR / ".env"), ".env"),
+        extra="ignore"
+    )
 
     ENVIRONMENT: str = "development"
     PORT: int = 8000
@@ -21,8 +29,16 @@ class Settings(BaseSettings):
     # AI Engine
     LLM_PROVIDER: str = "gemini"
     GEMINI_API_KEY: str = ""
-    GEMINI_MODEL: str = "gemini-1.5-flash"
+    GOOGLE_API_KEY: str = ""
+    GEMINI_MODEL: str = "gemini-3.8-flash"
     OPENAI_API_KEY: str = ""
+
+    def model_post_init(self, __context: Any) -> None:
+        # Strip whitespace and resolve GOOGLE_API_KEY fallback if GEMINI_API_KEY is unset
+        resolved_gemini = (self.GEMINI_API_KEY or self.GOOGLE_API_KEY or os.environ.get("GEMINI_API_KEY", "") or os.environ.get("GOOGLE_API_KEY", "")).strip().strip("'\"")
+        self.GEMINI_API_KEY = resolved_gemini
+        self.RAZORPAY_KEY_ID = self.RAZORPAY_KEY_ID.strip().strip("'\"")
+        self.RAZORPAY_KEY_SECRET = self.RAZORPAY_KEY_SECRET.strip().strip("'\"")
 
     @property
     def cors_origins_list(self) -> List[str]:

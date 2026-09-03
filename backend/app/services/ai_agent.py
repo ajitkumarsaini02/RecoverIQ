@@ -43,7 +43,7 @@ class AIAgentRecommendation(BaseModel):
     risk_level: RiskLevelType = Field(description="Risk assessment: LOW, MEDIUM, HIGH")
     reason: str = Field(description="Explainable customer context reasoning grounding the decision")
     requires_human_approval: bool = Field(description="Whether merchant operator approval is recommended")
-    mode: str = Field(default="HEURISTIC_FALLBACK", description="GEMINI or HEURISTIC_FALLBACK")
+    mode: str = Field(default="HEURISTIC_FALLBACK", description="LIVE_LLM or HEURISTIC_FALLBACK")
     model_used: str = Field(default="RecoverIQ Expert Heuristics Engine", description="Identifier of the reasoning model")
     fallback_used: bool = Field(default=True, description="Whether fallback mode was engaged")
 
@@ -59,6 +59,45 @@ class RecoveryAIAgent:
     Analyzes failed payments against customer context and returns structured, Pydantic-validated JSON.
     Never executes payments directly (bounded AI paradigm).
     """
+
+    @staticmethod
+    def _parse_json_payload(raw_text: str) -> Optional[Dict[str, Any]]:
+        """
+        Safely extracts and parses JSON payload from model response, handling
+        surrounding markdown fences (```json ... ```), conversational intros/outros,
+        or raw JSON.
+        """
+        if not raw_text or not raw_text.strip():
+            return None
+
+        text = raw_text.strip()
+
+        # 1. Try direct JSON parsing
+        try:
+            return json.loads(text)
+        except Exception:
+            pass
+
+        # 2. Extract using regex markdown fences
+        import re
+        fence_match = re.search(r"```(?:json)?\s*(\{[\s\S]*?\})\s*```", text, re.IGNORECASE)
+        if fence_match:
+            try:
+                return json.loads(fence_match.group(1).strip())
+            except Exception:
+                pass
+
+        # 3. Find outermost curly braces
+        start_idx = text.find("{")
+        end_idx = text.rfind("}")
+        if start_idx != -1 and end_idx != -1 and end_idx > start_idx:
+            try:
+                candidate = text[start_idx : end_idx + 1].strip()
+                return json.loads(candidate)
+            except Exception:
+                pass
+
+        return None
 
     def analyze_failure(
         self, 
@@ -107,8 +146,12 @@ class RecoveryAIAgent:
                 if live_result:
                     logger.info(f"Gemini AI reasoning successful for txn {context.transaction_id} using {live_result.model_used}")
                     return live_result
+                else:
+                    logger.info("Live LLM did not return a valid recommendation; engaging RecoverIQ expert heuristics engine.")
             except Exception as e:
-                logger.warning(f"Live LLM API call failed ({type(e).__name__}): {e}. Gracefully activating heuristic fallback engine.")
+                logger.warning(f"Live LLM API call encountered exception ({type(e).__name__}); engaging RecoverIQ expert heuristics engine.")
+        else:
+            logger.debug("AI credentials unconfigured; engaging RecoverIQ expert heuristics engine.")
 
         # Default / Graceful Fallback Heuristics Engine
         return self._run_expert_heuristics(context)
@@ -126,11 +169,16 @@ class RecoveryAIAgent:
     def _call_gemini_api(self, ctx: AIAnalysisInput) -> Optional[AIAgentRecommendation]:
         """
         Executes real Google Gemini API call using REST endpoint with JSON schema output.
+        Safely passes API key in header to avoid exposure in URLs and log traces.
         """
         import httpx
 
-        model = settings.GEMINI_MODEL or "gemini-1.5-flash"
-        api_url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={settings.GEMINI_API_KEY}"
+        model = settings.GEMINI_MODEL or "gemini-3.8-flash"
+        api_url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
+        headers = {
+            "x-goog-api-key": settings.GEMINI_API_KEY,
+            "Content-Type": "application/json"
+        }
 
         system_prompt = (
             "You are RecoverIQ, an expert fintech revenue recovery AI agent specialized in Indian payment systems (UPI, Card, Netbanking, Razorpay). "
@@ -165,39 +213,44 @@ class RecoveryAIAgent:
             ],
             "generationConfig": {
                 "responseMimeType": "application/json",
-                "response_mime_type": "application/json",
                 "temperature": 0.1
             }
         }
 
         try:
             with httpx.Client(timeout=15.0) as client:
-                response = client.post(api_url, json=payload)
+                response = client.post(api_url, headers=headers, json=payload)
                 if response.status_code != 200:
-                    logger.error(f"Gemini API returned HTTP {response.status_code}: {response.text[:200]}")
+                    status = response.status_code
+                    if status in (401, 403):
+                        logger.warning("Gemini LLM call failed: authentication error (invalid or unauthorized API key)")
+                    elif status == 404:
+                        logger.warning(f"Gemini LLM call failed: model unavailable or retired ({model})")
+                    elif status == 429:
+                        logger.warning("Gemini LLM call failed: rate limit or quota exceeded")
+                    elif status == 400:
+                        logger.warning("Gemini LLM call failed: invalid request payload or parameters")
+                    elif status in (500, 502, 503, 504):
+                        logger.warning("Gemini LLM call failed: Google API service unavailable")
+                    else:
+                        logger.warning(f"Gemini LLM call failed: HTTP {status}")
                     return None
 
                 res_data = response.json()
                 candidates = res_data.get("candidates", [])
                 if not candidates:
-                    logger.warning("Gemini API returned no candidates.")
+                    logger.warning("Gemini LLM call failed: model returned no candidates")
                     return None
 
                 content_text = candidates[0].get("content", {}).get("parts", [{}])[0].get("text", "")
                 if not content_text:
-                    logger.warning("Gemini API candidate parts contained empty text.")
+                    logger.warning("Gemini LLM call failed: candidate parts contained empty text")
                     return None
 
-                clean_text = content_text.strip()
-                if clean_text.startswith("```json"):
-                    clean_text = clean_text[7:]
-                elif clean_text.startswith("```"):
-                    clean_text = clean_text[3:]
-                if clean_text.endswith("```"):
-                    clean_text = clean_text[:-3]
-                clean_text = clean_text.strip()
-
-                parsed = json.loads(clean_text)
+                parsed = self._parse_json_payload(content_text)
+                if not parsed or not isinstance(parsed, dict):
+                    logger.warning("Gemini LLM call failed: unable to parse valid structured JSON from model response")
+                    return None
 
                 # Normalize action
                 raw_action = str(parsed.get("recommended_action", "PAYMENT_LINK")).upper()
@@ -224,15 +277,21 @@ class RecoveryAIAgent:
                     risk_level=raw_risk,
                     reason=str(parsed.get("reason", "AI assessed customer payment parameters.")),
                     requires_human_approval=bool(parsed.get("requires_human_approval", False) or ctx.amount >= 20000.0),
-                    mode="GEMINI",
-                    model_used=f"Google Gemini ({model})",
+                    mode="LIVE_LLM",
+                    model_used=model,
                     fallback_used=False
                 )
+        except httpx.TimeoutException:
+            logger.warning("Gemini LLM call failed: request timed out")
+            return None
+        except httpx.ConnectError:
+            logger.warning("Gemini LLM call failed: network connection error")
+            return None
+        except httpx.RequestError as e:
+            logger.warning(f"Gemini LLM call failed: transport error ({type(e).__name__})")
+            return None
         except Exception as e:
-            err_msg = str(e)
-            if settings.GEMINI_API_KEY:
-                err_msg = err_msg.replace(settings.GEMINI_API_KEY, "REDACTED_API_KEY")
-            logger.warning(f"Gemini API execution error ({type(e).__name__}): {err_msg}")
+            logger.warning(f"Gemini LLM call failed: unexpected error ({type(e).__name__})")
             return None
 
     def _call_openai_api(self, ctx: AIAnalysisInput) -> Optional[AIAgentRecommendation]:
@@ -273,7 +332,10 @@ class RecoveryAIAgent:
 
                 res_json = response.json()
                 content_str = res_json["choices"][0]["message"]["content"]
-                parsed = json.loads(content_str)
+                parsed = self._parse_json_payload(content_str)
+                if not parsed or not isinstance(parsed, dict):
+                    logger.warning("OpenAI LLM call failed: unable to parse valid structured JSON from model response")
+                    return None
 
                 prob = max(0.0, min(1.0, float(parsed.get("recovery_probability", 0.5))))
                 raw_action = str(parsed.get("recommended_action", "PAYMENT_LINK")).upper()
@@ -287,8 +349,8 @@ class RecoveryAIAgent:
                     risk_level=str(parsed.get("risk_level", "LOW")).upper() if str(parsed.get("risk_level", "LOW")).upper() in ["LOW", "MEDIUM", "HIGH"] else "MEDIUM",
                     reason=str(parsed.get("reason", "OpenAI assessed transaction parameters.")),
                     requires_human_approval=bool(parsed.get("requires_human_approval", False) or ctx.amount >= 20000.0),
-                    mode="OPENAI",
-                    model_used="OpenAI (gpt-4o-mini)",
+                    mode="LIVE_LLM",
+                    model_used="gpt-4o-mini",
                     fallback_used=False
                 )
         except Exception as e:

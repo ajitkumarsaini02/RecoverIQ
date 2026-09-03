@@ -83,7 +83,8 @@ def test_gemini_api_call_mocked_success():
                 assert result.recommended_action == "RETRY_PAYMENT"
                 assert result.risk_level == "LOW"
                 assert result.fallback_used is False
-                assert "Gemini" in result.model_used
+                assert result.mode == "LIVE_LLM"
+                assert "gemini" in result.model_used.lower()
 
 def test_gemini_fallback_when_api_key_unconfigured():
     """Verify that when Gemini is unconfigured or fails, the Heuristics Engine safely takes over."""
@@ -450,7 +451,154 @@ def test_gemini_markdown_fenced_json_parsing():
                 assert result.recommended_action == "ALTERNATIVE_PAYMENT_METHOD"
                 assert result.recovery_probability == 0.78
                 assert result.fallback_used is False
-                assert result.mode == "GEMINI"
+                assert result.mode == "LIVE_LLM"
+
+def test_gemini_conversational_wrapped_json_parsing():
+    """Verify that Gemini responses wrapped in conversational prose and markdown fences parse cleanly."""
+    conversational_text = """Here is your recovery analysis for the failed transaction:
+```json
+{
+    "diagnosis": "Card network decline due to OTP timeout",
+    "recovery_probability": 0.85,
+    "recommended_action": "RETRY_PAYMENT",
+    "risk_level": "LOW",
+    "reason": "Customer entered incorrect OTP initially.",
+    "requires_human_approval": false
+}
+```
+Please let me know if further analysis is needed."""
+
+    response_payload = {
+        "candidates": [
+            {
+                "content": {
+                    "parts": [{"text": conversational_text}]
+                }
+            }
+        ]
+    }
+
+    ctx = AIAnalysisInput(
+        transaction_id="txn_test_gemini_prose",
+        amount=2500.0,
+        currency="INR",
+        payment_method="CARD",
+        failure_reason="OTP_TIMEOUT",
+        error_code="OTP_TIMEOUT",
+        retry_count=0,
+        customer_id="cust_p1",
+        customer_name="Rohan Mehra",
+        customer_email="rohan@example.com",
+        customer_lifetime_value=18000.0,
+        previous_successful_payments=3,
+        previous_failed_payments=0,
+        previous_recovery_attempts=0
+    )
+
+    with patch.object(settings, "GEMINI_API_KEY", "mock-gemini-key"):
+        with patch.object(settings, "LLM_PROVIDER", "gemini"):
+            mock_client = MagicMock()
+            mock_resp = MagicMock()
+            mock_resp.status_code = 200
+            mock_resp.json.return_value = response_payload
+            mock_client.post.return_value = mock_resp
+
+            with patch("httpx.Client") as MockHttpx:
+                MockHttpx.return_value.__enter__.return_value = mock_client
+                result = ai_agent._call_gemini_api(ctx)
+
+                assert result is not None
+                assert result.diagnosis == "Card network decline due to OTP timeout"
+                assert result.recommended_action == "RETRY_PAYMENT"
+                assert result.recovery_probability == 0.85
+                assert result.mode == "LIVE_LLM"
+                assert result.fallback_used is False
+
+def test_gemini_error_classification_and_safe_logging(caplog):
+    """Verify that 401, 404, 429, 500 errors are safely classified without leaking credentials."""
+    import logging
+    ctx = AIAnalysisInput(
+        transaction_id="txn_test_err_class",
+        amount=1000.0,
+        currency="INR",
+        payment_method="UPI",
+        failure_reason="UPI_TIMEOUT",
+        retry_count=0,
+        customer_id="cust_err",
+        customer_name="Test User",
+        customer_email="test@example.com",
+        customer_lifetime_value=5000.0,
+        previous_successful_payments=1,
+        previous_failed_payments=0,
+        previous_recovery_attempts=0
+    )
+
+    secret_key = "super-secret-gemini-key-12345"
+    with patch.object(settings, "GEMINI_API_KEY", secret_key):
+        with patch.object(settings, "LLM_PROVIDER", "gemini"):
+            for status_code, expected_log_phrase in [
+                (401, "authentication error"),
+                (404, "model unavailable or retired"),
+                (429, "rate limit or quota exceeded"),
+                (500, "Google API service unavailable"),
+            ]:
+                mock_client = MagicMock()
+                mock_resp = MagicMock()
+                mock_resp.status_code = status_code
+                mock_client.post.return_value = mock_resp
+
+                with patch("httpx.Client") as MockHttpx:
+                    MockHttpx.return_value.__enter__.return_value = mock_client
+                    with caplog.at_level(logging.WARNING):
+                        caplog.clear()
+                        result = ai_agent._call_gemini_api(ctx)
+                        assert result is None
+                        assert any(expected_log_phrase in record.message for record in caplog.records)
+                        # Ensure secret key is NEVER in logs
+                        assert all(secret_key not in record.message for record in caplog.records)
+
+def test_gemini_uses_header_auth():
+    """Verify that GEMINI_API_KEY is transmitted via x-goog-api-key header and not exposed in URL."""
+    ctx = AIAnalysisInput(
+        transaction_id="txn_test_header_auth",
+        amount=1500.0,
+        currency="INR",
+        payment_method="UPI",
+        failure_reason="UPI_TIMEOUT",
+        retry_count=0,
+        customer_id="cust_hdr",
+        customer_name="Test User",
+        customer_email="test@example.com",
+        customer_lifetime_value=5000.0,
+        previous_successful_payments=1,
+        previous_failed_payments=0,
+        previous_recovery_attempts=0
+    )
+
+    secret_key = "my-secret-gemini-key"
+    with patch.object(settings, "GEMINI_API_KEY", secret_key):
+        with patch.object(settings, "LLM_PROVIDER", "gemini"):
+            mock_client = MagicMock()
+            mock_resp = MagicMock()
+            mock_resp.status_code = 200
+            mock_resp.json.return_value = {
+                "candidates": [{"content": {"parts": [{"text": '{"diagnosis": "ok", "recovery_probability": 0.9, "recommended_action": "RETRY_PAYMENT", "risk_level": "LOW", "reason": "ok", "requires_human_approval": false}'}]}}]
+            }
+            mock_client.post.return_value = mock_resp
+
+            with patch("httpx.Client") as MockHttpx:
+                MockHttpx.return_value.__enter__.return_value = mock_client
+                result = ai_agent._call_gemini_api(ctx)
+                assert result is not None
+
+                # Verify post call arguments
+                call_args = mock_client.post.call_args
+                called_url = call_args[0][0]
+                called_headers = call_args[1]["headers"]
+
+                # Secret key MUST be in headers and NOT in the URL
+                assert secret_key not in called_url
+                assert called_headers.get("x-goog-api-key") == secret_key
 
 from unittest.mock import patch, MagicMock, AsyncMock
 
@@ -1104,5 +1252,156 @@ def test_policy_engine_failsafe_default_error():
     assert res.action == "STOP"
     assert "Failsafe default" in res.reason
     db.close()
+
+
+def test_run_scenario_live_llm_and_razorpay_flow():
+    """Verify that when Gemini succeeds, scenario returns LIVE_LLM and maintains Razorpay flow."""
+    fake_gemini_response = {
+        "candidates": [
+            {
+                "content": {
+                    "parts": [
+                        {
+                            "text": json.dumps({
+                                "diagnosis": "UPI PSP timeout at issuing bank switch",
+                                "recovery_probability": 0.93,
+                                "recommended_action": "RETRY_PAYMENT",
+                                "risk_level": "LOW",
+                                "reason": "High-value loyal customer with transient gateway latency.",
+                                "requires_human_approval": False
+                            })
+                        }
+                    ]
+                }
+            }
+        ]
+    }
+
+    with patch.object(settings, "GEMINI_API_KEY", "valid-gemini-key-test"):
+        with patch.object(settings, "LLM_PROVIDER", "gemini"):
+            mock_client = MagicMock()
+            mock_resp = MagicMock()
+            mock_resp.status_code = 200
+            mock_resp.json.return_value = fake_gemini_response
+            mock_client.post.return_value = mock_resp
+
+            with patch("httpx.Client") as MockHttpx:
+                MockHttpx.return_value.__enter__.return_value = mock_client
+                with patch.object(razorpay_service, "key_id", "rzp_test_valid_123"), patch.object(razorpay_service, "key_secret", "valid_secret_456"):
+                    with patch.object(razorpay_service, "create_order", new_callable=AsyncMock) as mock_create_order:
+                        mock_create_order.return_value = {
+                            "id": "order_test_live_llm_123",
+                            "status": "created",
+                            "amount": 499900,
+                            "currency": "INR",
+                            "mode": "TEST_MODE"
+                        }
+                        with patch.object(razorpay_service, "fetch_order_payments", new_callable=AsyncMock) as mock_fetch:
+                            mock_fetch.return_value = [] # Unpaid order awaiting payment
+
+                            res = client.post("/api/demo/scenario", json={"scenario": "temporary_upi_failure", "mode": "TEST_MODE"})
+                            assert res.status_code == 200
+                            data = res.json()
+
+                            ai = data["ai_analysis"]
+                            assert ai["mode"] == "LIVE_LLM"
+                            assert ai["fallback_used"] is False
+                            assert ai["model_used"] == settings.GEMINI_MODEL
+                            assert ai["diagnosis"] == "UPI PSP timeout at issuing bank switch"
+                            assert ai["recommended_action"] == "RETRY_PAYMENT"
+
+                            rec = data["recovery_result"]
+                            assert rec["status"] == "PENDING"
+                            assert rec["mode"] == "TEST_MODE"
+                            assert rec["razorpay_order_id"] == "order_test_live_llm_123"
+
+                            txn = data["transaction"]
+                            assert txn["status"] == "RECOVERY_PENDING"
+                            assert txn["razorpay_order_id"] == "order_test_live_llm_123"
+
+
+def test_run_scenario_fallback_when_gemini_fails_preserves_razorpay_flow():
+    """Verify that when Gemini fails, fallback_used is True, mode is HEURISTIC_FALLBACK, and Razorpay flow is preserved."""
+    with patch.object(settings, "GEMINI_API_KEY", "failing-gemini-key"):
+        with patch.object(settings, "LLM_PROVIDER", "gemini"):
+            mock_client = MagicMock()
+            mock_resp = MagicMock()
+            mock_resp.status_code = 401 # Auth failure
+            mock_client.post.return_value = mock_resp
+
+            with patch("httpx.Client") as MockHttpx:
+                MockHttpx.return_value.__enter__.return_value = mock_client
+                with patch.object(razorpay_service, "key_id", "rzp_test_valid_123"), patch.object(razorpay_service, "key_secret", "valid_secret_456"):
+                    with patch.object(razorpay_service, "create_order", new_callable=AsyncMock) as mock_create_order:
+                        mock_create_order.return_value = {
+                            "id": "order_test_fallback_456",
+                            "status": "created",
+                            "amount": 499900,
+                            "currency": "INR",
+                            "mode": "TEST_MODE"
+                        }
+                        with patch.object(razorpay_service, "fetch_order_payments", new_callable=AsyncMock) as mock_fetch:
+                            mock_fetch.return_value = []
+
+                            res = client.post("/api/demo/scenario", json={"scenario": "temporary_upi_failure", "mode": "TEST_MODE"})
+                            assert res.status_code == 200
+                            data = res.json()
+
+                            ai = data["ai_analysis"]
+                            assert ai["mode"] == "HEURISTIC_FALLBACK"
+                            assert ai["fallback_used"] is True
+                            assert ai["model_used"] == "RecoverIQ Expert Heuristics Engine"
+
+                            rec = data["recovery_result"]
+                            assert rec["status"] == "PENDING"
+                            assert rec["mode"] == "TEST_MODE"
+                            assert rec["razorpay_order_id"] == "order_test_fallback_456"
+
+                            txn = data["transaction"]
+                            assert txn["status"] == "RECOVERY_PENDING"
+                            assert txn["razorpay_order_id"] == "order_test_fallback_456"
+
+
+def test_real_network_call_with_invalid_key_triggers_safe_fallback():
+    """Verify real HTTP network request to Google Generative Language API with dummy key safely triggers fallback without crashing or leaking secrets."""
+    ctx = AIAnalysisInput(
+        transaction_id="txn_real_net_test",
+        amount=1999.0,
+        currency="INR",
+        payment_method="UPI",
+        failure_reason="UPI_TIMEOUT",
+        retry_count=0,
+        customer_id="cust_net",
+        customer_name="Network Test",
+        customer_email="net@test.in",
+        customer_lifetime_value=10000.0,
+        previous_successful_payments=2,
+        previous_failed_payments=0,
+        previous_recovery_attempts=0
+    )
+
+    # Use a dummy key to hit real Google endpoint
+    with patch.object(settings, "GEMINI_API_KEY", "invalid_dummy_key_for_testing"):
+        with patch.object(settings, "LLM_PROVIDER", "gemini"):
+            # Real call without mock
+            result = ai_agent._call_gemini_api(ctx)
+            # Must safely return None due to 400/403 API response
+            assert result is None
+
+            # analyze_failure must return truthful HEURISTIC_FALLBACK
+            rec = ai_agent.analyze_failure(
+                Transaction(
+                    id="txn_net_fallback",
+                    customer_id="cust_net",
+                    amount=1999.0,
+                    payment_method="UPI",
+                    failure_reason="UPI_TIMEOUT",
+                    retry_count=0
+                )
+            )
+            assert rec.mode == "HEURISTIC_FALLBACK"
+            assert rec.fallback_used is True
+            assert rec.model_used == "RecoverIQ Expert Heuristics Engine"
+
 
 
