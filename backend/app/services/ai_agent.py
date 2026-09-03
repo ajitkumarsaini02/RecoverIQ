@@ -183,8 +183,9 @@ class RecoveryAIAgent:
 
         primary_model = settings.GEMINI_MODEL or "gemini-3.8-flash"
         candidate_models = [primary_model]
-        if primary_model != "gemini-2.5-flash":
-            candidate_models.append("gemini-2.5-flash")
+        for fallback_cand in ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"]:
+            if fallback_cand not in candidate_models:
+                candidate_models.append(fallback_cand)
 
         system_prompt = (
             "You are RecoverIQ, an expert fintech revenue recovery AI agent specialized in Indian payment systems (UPI, Card, Netbanking, Razorpay). "
@@ -306,9 +307,9 @@ class RecoveryAIAgent:
                             self.last_error_classification = "429 = rate limit"
                             logger.warning(f"Gemini LLM call failed: {self.last_error_classification}")
                             if attempt == 0:
-                                time.sleep(1.5)
+                                time.sleep(1.0)
                                 continue
-                            return None
+                            break
                         elif status in (500, 502, 503, 504):
                             self.last_error_classification = "500/503 = Gemini service error"
                             logger.warning(f"Gemini LLM call failed: {self.last_error_classification}")
@@ -330,18 +331,18 @@ class RecoveryAIAgent:
                     logger.warning(f"Gemini LLM call failed: {self.last_error_classification}")
                     if attempt == 0:
                         continue
-                    return None
+                    break
                 except (httpx.ConnectError, httpx.NetworkError):
                     self.last_error_classification = "timeout/network = connectivity"
                     logger.warning(f"Gemini LLM call failed: {self.last_error_classification}")
                     if attempt == 0:
                         time.sleep(1.0)
                         continue
-                    return None
+                    break
                 except Exception:
                     self.last_error_classification = "timeout/network = connectivity"
                     logger.warning(f"Gemini LLM call failed: {self.last_error_classification}")
-                    return None
+                    break
 
         return None
 
