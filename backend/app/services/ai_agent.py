@@ -183,7 +183,7 @@ class RecoveryAIAgent:
 
         primary_model = settings.GEMINI_MODEL or "gemini-3.8-flash"
         candidate_models = [primary_model]
-        for fallback_cand in ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash"]:
+        for fallback_cand in ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash", "gemini-3.8-pro", "gemini-3.0-pro", "gemini-3.0-flash"]:
             if fallback_cand not in candidate_models:
                 candidate_models.append(fallback_cand)
 
