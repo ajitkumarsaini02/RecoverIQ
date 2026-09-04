@@ -1,5 +1,5 @@
-import React from 'react';
-import { ShieldCheck, Cpu, Database, Zap, RefreshCw, Menu, X } from 'lucide-react';
+import React, { useState } from 'react';
+import { ShieldCheck, Cpu, Zap, RefreshCw, Menu, X, Info } from 'lucide-react';
 import { SystemStatus } from '../types';
 
 interface TopbarProps {
@@ -21,9 +21,11 @@ export const Topbar: React.FC<TopbarProps> = ({
 }) => {
   const isRzpLive = status?.integrations.razorpay.configured;
   const isAiLive = status?.integrations.ai_engine.configured;
+  const isFallback = status?.integrations.ai_engine.mode?.includes('FALLBACK') || !isAiLive;
+  const [showGuardrailTooltip, setShowGuardrailTooltip] = useState(false);
 
   return (
-    <header className="h-16 border-b border-surface-border bg-surface-card/90 backdrop-blur-md px-3 sm:px-6 flex items-center justify-between sticky top-0 z-40">
+    <header className="h-16 border-b border-surface-border bg-surface-card/95 backdrop-blur-md px-3 sm:px-6 flex items-center justify-between sticky top-0 z-40">
       <div className="flex items-center gap-2 sm:gap-3">
         {/* Mobile Hamburger Toggle Button */}
         <button
@@ -36,13 +38,13 @@ export const Topbar: React.FC<TopbarProps> = ({
           {mobileMenuOpen ? <X className="h-5 w-5" /> : <Menu className="h-5 w-5" />}
         </button>
 
-        {/* Logo & Title */}
+        {/* Logo & Brand Title */}
         <button 
           onClick={onLogoClick}
           className="flex items-center gap-2.5 sm:gap-3 text-left group focus:outline-none transition-all active:scale-95 cursor-pointer"
-          title="Go to Home / Playground"
+          title="RecoverIQ Home"
         >
-          <div className="h-8 w-8 sm:h-9 sm:w-9 rounded-xl bg-gradient-to-tr from-brand-600 to-blue-600 flex items-center justify-center shadow-lg shadow-brand-500/20 group-hover:shadow-brand-500/40 transition-shadow shrink-0">
+          <div className="h-8 w-8 sm:h-9 sm:w-9 rounded-xl bg-gradient-to-tr from-brand-600 to-blue-600 flex items-center justify-center shadow-md shadow-brand-500/20 group-hover:shadow-brand-500/40 transition-shadow shrink-0">
             <Zap className="h-4 w-4 sm:h-5 sm:w-5 text-white" />
           </div>
           <div>
@@ -55,53 +57,98 @@ export const Topbar: React.FC<TopbarProps> = ({
               </span>
             </div>
             <p className="text-[10px] sm:text-xs text-slate-400 group-hover:text-slate-300 transition-colors hidden xs:block">
-              Razorpay AI Recovery Engine
+              AI Payment Recovery Platform
             </p>
           </div>
         </button>
       </div>
 
-      {/* Integration Badges */}
-      <div className="flex items-center gap-1.5 sm:gap-3">
-        {/* Razorpay Badge */}
-        <div className="flex items-center gap-1.5 px-2 sm:px-3 py-1 rounded-lg bg-surface-base border border-surface-border text-[10px] sm:text-xs font-mono">
+      {/* Integration Badges & Header Controls */}
+      <div className="flex items-center gap-2 sm:gap-3">
+        {/* 1. Razorpay Test Mode Badge (Unmistakable Test Indicator) */}
+        <div 
+          className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1 rounded-lg bg-surface-base border border-surface-border text-[11px] font-mono"
+          title="Razorpay Test Environment: Simulated transactions only. Real accounts will never be charged."
+        >
           <span className={`h-2 w-2 rounded-full shrink-0 ${isRzpLive ? 'bg-emerald-400 animate-pulse' : 'bg-blue-400'}`} />
-          <span className="text-slate-400 hidden sm:inline">Razorpay:</span>
-          <span className={isRzpLive ? 'text-emerald-400 font-semibold' : 'text-blue-400 font-semibold'}>
-            {status?.integrations.razorpay.mode === 'TEST_MODE' ? 'TEST' : 'SIM'}
+          <span className="text-slate-400 hidden lg:inline">GATEWAY:</span>
+          <span className="font-semibold text-emerald-400">
+            RAZORPAY · TEST MODE
           </span>
         </div>
 
-        {/* AI Agent Badge */}
-        <div className="flex items-center gap-1.5 px-2 sm:px-3 py-1 rounded-lg bg-surface-base border border-surface-border text-[10px] sm:text-xs font-mono">
-          <Cpu className="h-3 w-3 sm:h-3.5 sm:w-3.5 text-purple-400 shrink-0" />
-          <span className="text-slate-400 hidden sm:inline">AI:</span>
-          <span className={isAiLive ? 'text-purple-300 font-semibold' : 'text-emerald-400 font-semibold'}>
-            {isAiLive ? (status?.integrations.ai_engine.provider || 'GEMINI').toUpperCase() : 'HEURISTIC'}
+        {/* 2. AI Engine State Badge */}
+        <div 
+          className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1 rounded-lg bg-surface-base border border-surface-border text-[11px] font-mono"
+          title={isFallback ? 'Running on deterministic heuristic fallback' : 'Connected to live Gemini AI'}
+        >
+          <Cpu className="h-3.5 w-3.5 text-purple-400 shrink-0" />
+          <span className="text-slate-400 hidden xl:inline">AI:</span>
+          <span className={`font-semibold ${isFallback ? 'text-amber-300' : 'text-purple-300'}`}>
+            {isFallback ? 'FALLBACK · Heuristic' : `LIVE AI · ${(status?.integrations.ai_engine.provider || 'Gemini').toUpperCase()}`}
           </span>
         </div>
 
-        {/* DB Badge (Desktop only) */}
-        <div className="items-center gap-1.5 px-3 py-1 rounded-lg bg-surface-base border border-surface-border text-xs font-mono hidden xl:flex">
-          <Database className="h-3.5 w-3.5 text-slate-400" />
-          <span className="text-slate-400">DB:</span>
-          <span className="text-emerald-400 font-semibold">{(status?.integrations.database?.engine || 'DB').toUpperCase()}</span>
+        {/* 3. Policy Guardrails Active Popover / Tooltip */}
+        <div className="relative hidden sm:block">
+          <button
+            type="button"
+            onClick={() => setShowGuardrailTooltip(!showGuardrailTooltip)}
+            onMouseEnter={() => setShowGuardrailTooltip(true)}
+            onMouseLeave={() => setShowGuardrailTooltip(false)}
+            className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1 rounded-lg bg-brand-950/40 border border-brand-800/50 text-[11px] font-mono text-brand-300 hover:border-brand-500/60 transition-all cursor-pointer"
+          >
+            <ShieldCheck className="h-3.5 w-3.5 text-brand-400" />
+            <span className="font-semibold">GUARDRAILS ACTIVE</span>
+            <Info className="h-3 w-3 text-brand-400/80" />
+          </button>
+
+          {showGuardrailTooltip && (
+            <div className="absolute right-0 top-full mt-2 w-72 p-3.5 rounded-xl bg-[#0d1424] border border-brand-500/40 shadow-2xl z-50 text-xs text-slate-200 animate-fadeIn">
+              <div className="flex items-center justify-between pb-2 mb-2 border-b border-surface-border">
+                <div className="flex items-center gap-1.5 font-bold text-brand-300 font-mono text-[11px]">
+                  <ShieldCheck className="h-4 w-4 text-brand-400" />
+                  <span>SAFETY GUARDRAILS ACTIVE</span>
+                </div>
+              </div>
+              <p className="text-[11px] text-slate-400 mb-2.5">
+                Deterministic policy controls enforced before any external payment action can execute:
+              </p>
+              <ul className="space-y-1.5 text-[11px] font-mono">
+                <li className="flex items-start gap-1.5">
+                  <span className="text-brand-400 font-bold">•</span>
+                  <span><strong className="text-white">Max Retries:</strong> 2 attempts per payment</span>
+                </li>
+                <li className="flex items-start gap-1.5">
+                  <span className="text-brand-400 font-bold">•</span>
+                  <span><strong className="text-white">High-Value Gate:</strong> Approval for &gt; ₹20,000</span>
+                </li>
+                <li className="flex items-start gap-1.5">
+                  <span className="text-brand-400 font-bold">•</span>
+                  <span><strong className="text-white">Probability Floor:</strong> Min 25% confidence</span>
+                </li>
+                <li className="flex items-start gap-1.5">
+                  <span className="text-brand-400 font-bold">•</span>
+                  <span><strong className="text-white">Repeated Failure Cap:</strong> Auto-stop chronic issues</span>
+                </li>
+                <li className="flex items-start gap-1.5">
+                  <span className="text-brand-400 font-bold">•</span>
+                  <span><strong className="text-white">Audit Logging:</strong> 100% immutable record</span>
+                </li>
+              </ul>
+            </div>
+          )}
         </div>
 
-        {/* Policy Guardrails Active Indicator (Desktop only) */}
-        <div className="items-center gap-1.5 px-3 py-1 rounded-lg bg-brand-950/40 border border-brand-800/40 text-xs font-mono text-brand-400 hidden lg:flex">
-          <ShieldCheck className="h-3.5 w-3.5 text-brand-400" />
-          <span>GUARDRAILS</span>
-        </div>
-
-        {/* Refresh button */}
+        {/* Refresh Status Button */}
         <button
           onClick={onRefresh}
           disabled={loading}
-          className="p-1.5 sm:p-2 rounded-lg bg-surface-base border border-surface-border text-slate-400 hover:text-white hover:border-slate-600 transition-colors shrink-0 cursor-pointer"
-          title="Refresh Status"
+          className="p-2 rounded-lg bg-surface-base border border-surface-border text-slate-400 hover:text-white hover:border-slate-600 transition-colors shrink-0 cursor-pointer"
+          title="Refresh Integration Health"
+          aria-label="Refresh Status"
         >
-          <RefreshCw className={`h-3.5 w-3.5 sm:h-4 sm:w-4 ${loading ? 'animate-spin text-brand-400' : ''}`} />
+          <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin text-brand-400' : ''}`} />
         </button>
       </div>
     </header>

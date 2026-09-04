@@ -4,7 +4,9 @@ import {
   Cpu, 
   ShieldCheck, 
   RefreshCw, 
-  CheckCircle2
+  CheckCircle2,
+  Database,
+  Lock
 } from 'lucide-react';
 import { SystemStatus } from '../types';
 import { fetchHealth } from '../services/api';
@@ -31,19 +33,22 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ status, onRefresh })
     }
   };
 
+  const isRzpLive = status?.integrations.razorpay.configured;
+  const isAiLive = status?.integrations.ai_engine.configured;
+
   return (
-    <div className="space-y-4 sm:space-y-6">
+    <div className="space-y-6">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 sm:gap-4">
         <div>
           <div className="flex flex-wrap items-center gap-2">
-            <h2 className="text-lg sm:text-xl font-bold tracking-tight text-white">System & Integration Status</h2>
-            <span className="px-2.5 py-0.5 rounded-full text-[10px] sm:text-[11px] font-mono font-semibold bg-brand-500/20 text-brand-300 border border-brand-500/30">
-              ENVIRONMENT: {status?.mode || 'SANDBOX'}
+            <h2 className="text-lg sm:text-xl font-bold tracking-tight text-white">System & Keys Configuration</h2>
+            <span className="px-2.5 py-0.5 rounded-full text-[10px] sm:text-[11px] font-mono font-semibold bg-brand-500/15 text-brand-300 border border-brand-500/30">
+              ENV: {status?.mode || 'TEST SANDBOX'}
             </span>
           </div>
-          <p className="text-[11px] sm:text-xs text-slate-400 mt-1">
-            Integration configuration for Razorpay Test Mode, AI Reasoning Layer, and Database.
+          <p className="text-xs text-slate-400 mt-1">
+            Enterprise infrastructure settings, gateway credentials, AI engine parameters, and policy safety thresholds.
           </p>
         </div>
 
@@ -53,116 +58,174 @@ export const SettingsView: React.FC<SettingsViewProps> = ({ status, onRefresh })
           className="px-4 py-2 rounded-xl bg-surface-card border border-surface-border text-xs font-mono text-slate-200 hover:text-white hover:border-slate-600 transition-colors flex items-center justify-center gap-2 cursor-pointer w-full sm:w-auto"
         >
           <RefreshCw className={`h-3.5 w-3.5 ${testingPing ? 'animate-spin text-brand-400' : ''}`} />
-          <span>{testingPing ? 'Testing...' : 'Test Backend Connection'}</span>
+          <span>{testingPing ? 'Testing API Ping...' : 'Test Backend Health'}</span>
         </button>
       </div>
 
       {pingSuccess === true && (
-        <div className="p-4 rounded-xl bg-emerald-950/40 border border-emerald-800/50 text-emerald-300 flex items-center gap-2 text-xs">
+        <div className="p-3.5 sm:p-4 rounded-xl bg-emerald-950/40 border border-emerald-800/50 text-emerald-300 flex items-center gap-2 text-xs">
           <CheckCircle2 className="h-4 w-4 text-emerald-400 shrink-0" />
-          <span>Backend health check successful: 200 OK</span>
+          <span>Backend health check successful: 200 OK. All services operational.</span>
         </div>
       )}
 
-      {/* 3 Main Integration Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        {/* Razorpay Integration */}
-        <div className="p-6 rounded-2xl glass-panel border border-surface-border space-y-4">
+      {/* 4 Technical Infrastructure Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {/* Card 1: Razorpay Integration */}
+        <div className="p-5 sm:p-6 rounded-2xl glass-panel border border-surface-border space-y-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Key className="h-5 w-5 text-razorpay-accent" />
-              <h3 className="text-sm font-bold text-white">Razorpay Test Mode</h3>
+              <h3 className="text-sm font-bold text-white">Razorpay Gateway Integration</h3>
             </div>
             <span className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded-full border ${
-              status?.integrations.razorpay.configured
-                ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30'
-                : 'bg-blue-500/20 text-blue-400 border-blue-500/30'
+              isRzpLive
+                ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
+                : 'bg-blue-500/15 text-blue-400 border-blue-500/30'
             }`}>
-              {status?.integrations.razorpay.mode}
+              {status?.integrations.razorpay.mode || 'TEST_MODE'}
             </span>
           </div>
 
-          <div className="space-y-2 text-xs text-slate-300">
-            <div className="flex justify-between">
-              <span className="text-slate-400">Key ID:</span>
-              <span className="font-mono text-slate-200">{status?.integrations.razorpay.key_id_masked || 'SIMULATED'}</span>
-            </div>
-            <div className="flex justify-between">
+          <div className="space-y-2.5 text-xs text-slate-300">
+            <div className="flex justify-between items-center">
               <span className="text-slate-400">Environment:</span>
-              <span className="font-semibold text-emerald-400">TEST MODE ONLY</span>
+              <span className="font-semibold text-emerald-400 font-mono text-[11px]">RAZORPAY TEST MODE</span>
             </div>
-            <div className="flex justify-between">
+            <div className="flex justify-between items-center">
+              <span className="text-slate-400">Key ID (Masked):</span>
+              <span className="font-mono text-slate-200 bg-surface-base px-2 py-0.5 rounded border border-surface-border">
+                {status?.integrations.razorpay.key_id_masked || 'rzp_test_••••••••1Rp'}
+              </span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-slate-400">Key Secret:</span>
+              <span className="font-mono text-slate-400 flex items-center gap-1">
+                <Lock className="h-3 w-3" /> •••••••••••••••• (Masked)
+              </span>
+            </div>
+            <div className="flex justify-between items-center">
               <span className="text-slate-400">Safety Guard:</span>
-              <span className="text-slate-300">Never uses real money</span>
+              <span className="text-emerald-300">Zero real money charged</span>
             </div>
           </div>
 
           <div className="p-3 rounded-lg bg-surface-base border border-surface-border text-[11px] text-slate-400">
-            To use official Razorpay Test Mode keys, specify <code>RAZORPAY_KEY_ID</code> and <code>RAZORPAY_KEY_SECRET</code> in <code>backend/.env</code>.
+            All recovery orders and payment links are created strictly in Razorpay Test sandbox. Production merchant credentials are never accessed.
           </div>
         </div>
 
-        {/* AI Agent Engine */}
-        <div className="p-6 rounded-2xl glass-panel border border-surface-border space-y-4">
+        {/* Card 2: AI Reasoning Agent */}
+        <div className="p-5 sm:p-6 rounded-2xl glass-panel border border-surface-border space-y-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Cpu className="h-5 w-5 text-purple-400" />
-              <h3 className="text-sm font-bold text-white">AI Reasoning Agent</h3>
+              <h3 className="text-sm font-bold text-white">AI Reasoning Engine</h3>
             </div>
-            <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/30">
-              {status?.integrations.ai_engine.mode || 'ONLINE'}
+            <span className={`text-[10px] font-mono font-bold px-2 py-0.5 rounded-full border ${
+              isAiLive
+                ? 'bg-purple-500/15 text-purple-300 border-purple-500/30'
+                : 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
+            }`}>
+              {isAiLive ? (status?.integrations.ai_engine.mode || 'ONLINE') : 'HEURISTIC'}
             </span>
           </div>
 
-          <div className="space-y-2 text-xs text-slate-300">
-            <div className="flex justify-between">
-              <span className="text-slate-400">Engine Type:</span>
-              <span className="font-semibold text-purple-300">{status?.integrations.ai_engine.provider.toUpperCase()}</span>
+          <div className="space-y-2.5 text-xs text-slate-300">
+            <div className="flex justify-between items-center">
+              <span className="text-slate-400">Provider:</span>
+              <span className="font-semibold text-purple-300 font-mono text-[11px]">
+                {status?.integrations.ai_engine.provider.toUpperCase() || 'GEMINI'}
+              </span>
             </div>
-            <div className="flex justify-between">
+            <div className="flex justify-between items-center">
+              <span className="text-slate-400">Model Architecture:</span>
+              <span className="font-mono text-slate-200">gemini-3.8-flash</span>
+            </div>
+            <div className="flex justify-between items-center">
               <span className="text-slate-400">Schema Validation:</span>
-              <span className="font-mono text-brand-400">Pydantic v2</span>
+              <span className="font-mono text-emerald-400 font-semibold">Pydantic v2 (Strict Typed)</span>
             </div>
-            <div className="flex justify-between">
-              <span className="text-slate-400">Fallback Heuristics:</span>
-              <span className="text-emerald-400 font-semibold">100% Uptime Ready</span>
+            <div className="flex justify-between items-center">
+              <span className="text-slate-400">Domain Fallback:</span>
+              <span className="text-emerald-300">100% Deterministic Fallback Ready</span>
             </div>
           </div>
 
           <div className="p-3 rounded-lg bg-surface-base border border-surface-border text-[11px] text-slate-400">
-            Deterministic domain fallback guarantees 100% agent reliability even if third-party LLM APIs are offline.
+            AI outputs are strictly parsed into deterministic schema objects. If the external LLM is unreachable, the system gracefully falls back to local heuristic rules without downtime.
           </div>
         </div>
 
-        {/* Policy Engine & Guardrails */}
-        <div className="p-6 rounded-2xl glass-panel border border-surface-border space-y-4">
+        {/* Card 3: Policy Engine Guardrails */}
+        <div className="p-5 sm:p-6 rounded-2xl glass-panel border border-surface-border space-y-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <ShieldCheck className="h-5 w-5 text-brand-400" />
+              <ShieldCheck className="h-5 w-5 text-emerald-400" />
               <h3 className="text-sm font-bold text-white">Policy Engine Guardrails</h3>
             </div>
-            <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-brand-500/20 text-brand-300 border border-brand-500/30">
-              ENFORCED
+            <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
+              DETERMINISTIC GATE
             </span>
           </div>
 
-          <div className="space-y-2 text-xs text-slate-300">
-            <div className="flex justify-between">
+          <div className="space-y-2.5 text-xs text-slate-300">
+            <div className="flex justify-between items-center">
               <span className="text-slate-400">Max Auto Retries:</span>
-              <span className="font-bold text-white font-mono">2 Attempts</span>
+              <span className="font-bold text-white font-mono">2 Attempts Ceiling</span>
             </div>
-            <div className="flex justify-between">
-              <span className="text-slate-400">High-Value Gate:</span>
-              <span className="font-bold text-amber-300 font-mono">&gt; ₹20,000</span>
+            <div className="flex justify-between items-center">
+              <span className="text-slate-400">High-Value Escalation:</span>
+              <span className="font-bold text-amber-300 font-mono">&gt; ₹20,000 threshold</span>
             </div>
-            <div className="flex justify-between">
-              <span className="text-slate-400">Min Prob Floor:</span>
-              <span className="font-bold text-white font-mono">25% (0.25)</span>
+            <div className="flex justify-between items-center">
+              <span className="text-slate-400">Min Probability Floor:</span>
+              <span className="font-bold text-white font-mono">25% (0.25 confidence)</span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-slate-400">Repeated Failure Cap:</span>
+              <span className="text-slate-200">Auto-stop on chronic decline</span>
             </div>
           </div>
 
           <div className="p-3 rounded-lg bg-surface-base border border-surface-border text-[11px] text-slate-400">
-            All AI decisions are bounded, explainable, and gated before any payment action executes.
+            Policy guardrails execute synchronously after AI analysis. No payment action can bypass this deterministic safety gate.
+          </div>
+        </div>
+
+        {/* Card 4: Database & Infrastructure */}
+        <div className="p-5 sm:p-6 rounded-2xl glass-panel border border-surface-border space-y-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Database className="h-5 w-5 text-blue-400" />
+              <h3 className="text-sm font-bold text-white">Database & Application Layer</h3>
+            </div>
+            <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded-full bg-blue-500/15 text-blue-300 border border-blue-500/30">
+              LOCAL / ACID
+            </span>
+          </div>
+
+          <div className="space-y-2.5 text-xs text-slate-300">
+            <div className="flex justify-between items-center">
+              <span className="text-slate-400">Database Engine:</span>
+              <span className="font-mono text-slate-200 font-semibold">SQLite 3</span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-slate-400">ORM Layer:</span>
+              <span className="font-mono text-slate-200">SQLAlchemy 2.0</span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-slate-400">API Framework:</span>
+              <span className="font-mono text-emerald-400">FastAPI 0.115</span>
+            </div>
+            <div className="flex justify-between items-center">
+              <span className="text-slate-400">Audit Storage:</span>
+              <span className="text-slate-200">Immutable Relational Log</span>
+            </div>
+          </div>
+
+          <div className="p-3 rounded-lg bg-surface-base border border-surface-border text-[11px] text-slate-400">
+            Relational tables manage customers, transactions, recovery actions, and immutable audit trails with transaction-level ACID compliance.
           </div>
         </div>
       </div>

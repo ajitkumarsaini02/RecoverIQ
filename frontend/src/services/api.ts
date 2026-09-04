@@ -38,6 +38,7 @@ export async function fetchDashboardMetrics(): Promise<DashboardMetrics> {
 export async function fetchTransactions(params?: { 
   status?: string; 
   failure_reason?: string; 
+  payment_method?: string;
   search?: string;
   limit?: number;
   offset?: number;
@@ -45,6 +46,7 @@ export async function fetchTransactions(params?: {
   const query = new URLSearchParams();
   if (params?.status) query.append('status', params.status);
   if (params?.failure_reason) query.append('failure_reason', params.failure_reason);
+  if (params?.payment_method) query.append('payment_method', params.payment_method);
   if (params?.search) query.append('search', params.search);
   if (params?.limit) query.append('limit', params.limit.toString());
   if (params?.offset) query.append('offset', params.offset.toString());
