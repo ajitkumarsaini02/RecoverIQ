@@ -157,7 +157,7 @@ export const Transactions: React.FC = () => {
             </span>
           </div>
           <p className="text-xs text-slate-400 mt-1">
-            Over 1,200+ merchant transactions with complete customer history, failure reasons, and LTV context.
+            Complete merchant transaction ledger with customer history, failure reasons, and LTV context.
           </p>
         </div>
 

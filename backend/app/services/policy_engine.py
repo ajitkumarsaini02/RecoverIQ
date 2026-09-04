@@ -41,6 +41,9 @@ class DeterministicPolicyEngine:
     LOW_PROBABILITY_THRESHOLD = 0.25 # 25% minimum floor
     COOLDOWN_SECONDS = 30 # seconds
     VALID_ACTIONS = {"RETRY_PAYMENT", "PAYMENT_LINK", "ALTERNATIVE_PAYMENT_METHOD", "REMINDER", "HUMAN_ESCALATION", "STOP"}
+    # Automated recovery attempts that consume the retry budget. Soft (REMINDER) and
+    # terminal (STOP / HUMAN_ESCALATION) actions do not count against the ceiling.
+    RETRY_LIKE_ACTIONS = {"RETRY_PAYMENT", "PAYMENT_LINK", "ALTERNATIVE_PAYMENT_METHOD"}
 
     def evaluate(self, transaction: Transaction, recommendation: AIAgentRecommendation) -> PolicyEvaluationResult:
         try:
@@ -63,8 +66,10 @@ class DeterministicPolicyEngine:
                     reason=reason_msg
                 ))
 
-            # Rule 1: Maximum 2 Automatic Retry Attempts (Ceiling)
-            if action == "RETRY_PAYMENT" and (transaction.retry_count or 0) >= self.MAX_RETRIES:
+            # Rule 1: Maximum 2 Automatic Retry Attempts (Ceiling) — applies to every
+            # automated recovery attempt, not just RETRY_PAYMENT, so PAYMENT_LINK /
+            # ALTERNATIVE_PAYMENT_METHOD cannot loop past the cap.
+            if action in self.RETRY_LIKE_ACTIONS and (transaction.retry_count or 0) >= self.MAX_RETRIES:
                 allowed = False
                 action = "STOP"
                 reason_msg = f"Exceeded maximum automated retry limit ({self.MAX_RETRIES} allowed, {transaction.retry_count} attempted). Action overridden to STOP."

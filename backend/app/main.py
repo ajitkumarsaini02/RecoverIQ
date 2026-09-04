@@ -34,14 +34,17 @@ app = FastAPI(
 # Configure CORS - Enable cross-origin API access for Vercel, Render and local development
 cors_origins = settings.cors_origins_list
 if settings.ENVIRONMENT == "development" or "*" in cors_origins:
+    # A wildcard origin cannot be combined with credentials (browsers reject that combo).
     allow_origins = ["*"]
+    allow_credentials = False
 else:
     allow_origins = cors_origins
+    allow_credentials = True
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=allow_origins,
-    allow_credentials=True,
+    allow_credentials=allow_credentials,
     allow_methods=["*"],
     allow_headers=["*"],
 )

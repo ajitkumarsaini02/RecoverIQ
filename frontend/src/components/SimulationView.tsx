@@ -89,7 +89,7 @@ export const SimulationView: React.FC = () => {
             <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3 pt-2">
               <div className="p-4 rounded-xl bg-surface-base border border-surface-border">
                 <span className="text-[10px] font-mono text-slate-400 uppercase block">Portfolio</span>
-                <span className="text-lg font-bold text-white">{simResult.total_portfolio_transactions || 1200}+ Txns</span>
+                <span className="text-lg font-bold text-white">{(simResult.total_portfolio_transactions ?? 0).toLocaleString('en-IN')} Txns</span>
               </div>
 
               <div className="p-4 rounded-xl bg-surface-base border border-surface-border">

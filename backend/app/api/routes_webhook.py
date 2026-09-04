@@ -31,7 +31,16 @@ async def handle_razorpay_webhook(
         logger.warning("Razorpay webhook received without X-Razorpay-Signature header.")
         raise HTTPException(status_code=400, detail="Missing X-Razorpay-Signature header")
     
-    webhook_secret = settings.RAZORPAY_WEBHOOK_SECRET or "whsec_dummy"
+    # In production a real webhook secret is mandatory — never verify against the
+    # public default ("whsec_dummy" ships in source). Fail closed so a forged webhook
+    # cannot fabricate a recovery. Local/test/demo runs may fall back to the default.
+    webhook_secret = (settings.RAZORPAY_WEBHOOK_SECRET or "").strip()
+    if settings.ENVIRONMENT == "production":
+        if not webhook_secret or webhook_secret == "whsec_dummy":
+            logger.error("Webhook rejected: RAZORPAY_WEBHOOK_SECRET is not configured (or is the insecure default) in production.")
+            raise HTTPException(status_code=503, detail="Webhook signature secret is not configured")
+    elif not webhook_secret:
+        webhook_secret = "whsec_dummy"
     is_valid = razorpay_service.verify_webhook_signature(
         payload_body=body_bytes,
         signature=x_razorpay_signature,

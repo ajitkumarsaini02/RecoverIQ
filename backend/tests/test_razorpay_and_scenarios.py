@@ -8,8 +8,11 @@ from app.db.models import Transaction, Customer
 
 @pytest.mark.asyncio
 async def test_razorpay_service_abstraction():
-    # Test order creation in simulation/fallback mode
-    order = await razorpay_service.create_order(amount_in_inr=4999.0)
+    # Force SIMULATION_MODE so this unit test validates the service abstraction's
+    # output shape deterministically & offline — the live TEST_MODE path (subject to
+    # Razorpay's 30/day test payment-link rate limit) is exercised separately in
+    # test_gemini_and_razorpay_live.py, and must not make this suite flaky.
+    order = await razorpay_service.create_order(amount_in_inr=4999.0, force_mode="SIMULATION_MODE")
     assert order is not None
     assert "id" in order
     assert order["amount"] == 499900 # In paise
@@ -20,7 +23,8 @@ async def test_razorpay_service_abstraction():
     plink = await razorpay_service.create_payment_link(
         amount_in_inr=4999.0,
         customer_name="Priya Sharma",
-        customer_email="priya.sharma@gmail.com"
+        customer_email="priya.sharma@gmail.com",
+        force_mode="SIMULATION_MODE"
     )
     assert plink is not None
     assert "short_url" in plink

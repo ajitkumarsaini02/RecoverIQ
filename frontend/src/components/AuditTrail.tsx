@@ -54,6 +54,10 @@ export const AuditTrail: React.FC = () => {
     return true;
   });
 
+  // Event-type dropdown options are derived from the actual loaded events, so the filter
+  // always matches the backend's real emitted event types (no stale hardcoded enum).
+  const eventTypeOptions = Array.from(new Set(events.map((e) => e.event_type).filter(Boolean))).sort();
+
   const getActorBadge = (actor: string) => {
     switch (actor) {
       case 'AI_AGENT':
@@ -178,18 +182,9 @@ export const AuditTrail: React.FC = () => {
             className="w-full px-3 py-2 rounded-lg bg-surface-base border border-surface-border text-xs text-slate-200 focus:outline-none focus:border-brand-500"
           >
             <option value="ALL">All Event Types</option>
-            <option value="PAYMENT_FAILED">PAYMENT_FAILED</option>
-            <option value="FAILURE_ANALYZED">FAILURE_ANALYZED</option>
-            <option value="CUSTOMER_CONTEXT_ANALYZED">CUSTOMER_CONTEXT_ANALYZED</option>
-            <option value="AI_RECOMMENDATION">AI_RECOMMENDATION</option>
-            <option value="POLICY_VALIDATED">POLICY_VALIDATED</option>
-            <option value="APPROVAL_REQUESTED">APPROVAL_REQUESTED</option>
-            <option value="ACTION_APPROVED">ACTION_APPROVED</option>
-            <option value="ACTION_REJECTED">ACTION_REJECTED</option>
-            <option value="RECOVERY_EXECUTED">RECOVERY_EXECUTED</option>
-            <option value="RECOVERY_SUCCEEDED">RECOVERY_SUCCEEDED</option>
-            <option value="PAYMENT_RECOVERED">PAYMENT_RECOVERED</option>
-            <option value="RECOVERY_STOPPED">RECOVERY_STOPPED</option>
+            {eventTypeOptions.map((et) => (
+              <option key={et} value={et}>{et}</option>
+            ))}
           </select>
         </div>
       </div>

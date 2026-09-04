@@ -1,6 +1,7 @@
 import uuid
 import json
 import random
+import hashlib
 from datetime import datetime, timezone, timedelta
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session, joinedload
@@ -91,14 +92,8 @@ def get_dashboard_metrics(db: Session = Depends(get_db)):
         {"action": a[0], "count": a[1]}
         for a in action_query
     ]
-    if not recovery_actions_breakdown:
-        recovery_actions_breakdown = [
-            {"action": "RETRY_PAYMENT", "count": int(total_failed_count * 0.45)},
-            {"action": "PAYMENT_LINK", "count": int(total_failed_count * 0.25)},
-            {"action": "ALTERNATIVE_PAYMENT_METHOD", "count": int(total_failed_count * 0.15)},
-            {"action": "REMINDER", "count": int(total_failed_count * 0.08)},
-            {"action": "STOP", "count": int(total_failed_count * 0.07)}
-        ]
+    # No fabricated fallback: the chart reflects only real executed recovery actions
+    # (empty until recoveries run), keeping every dashboard number truthful.
 
     # 7. Chart 4: Recovery Outcomes Breakdown
     outcome_query = db.query(
@@ -122,7 +117,7 @@ def get_dashboard_metrics(db: Session = Depends(get_db)):
         day_at_risk = db.query(func.sum(Transaction.amount)).filter(
             Transaction.created_at >= day_start,
             Transaction.created_at < day_end,
-            Transaction.status.in_(["FAILED", "APPROVAL_REQUIRED", "STOPPED"])
+            Transaction.status.in_(["FAILED", "RECOVERY_PENDING", "APPROVAL_REQUIRED", "STOPPED"])
         ).scalar() or 0.0
 
         day_recovered = db.query(func.sum(Transaction.amount)).filter(
@@ -207,6 +202,11 @@ def run_batch_simulation(
     approvals_cnt = 0
     now = datetime.now(timezone.utc)
 
+    # Deterministic, reproducible per-portfolio outcomes: the same candidate set yields
+    # the same recovered total on every run, with no arbitrary success floor skewing it.
+    seed_material = "|".join(sorted(t.id for t in candidates))
+    rng = random.Random(hashlib.sha256(seed_material.encode("utf-8")).hexdigest())
+
     for txn in candidates:
         recommendation = ai_agent.analyze_failure(transaction=txn, customer=txn.customer, force_heuristics=True)
         policy_res = policy_engine.evaluate(transaction=txn, recommendation=recommendation)
@@ -227,7 +227,7 @@ def run_batch_simulation(
         else:
             attempts_cnt += 1
             # Policy approved -> simulated successful recovery based on probability
-            if random.random() <= max(0.60, recommendation.recovery_probability):
+            if rng.random() <= recommendation.recovery_probability:
                 txn.status = "RECOVERED"
                 txn.retry_count += 1
                 recov_amt = txn.amount

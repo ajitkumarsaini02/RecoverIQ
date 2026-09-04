@@ -85,7 +85,7 @@ export const Topbar: React.FC<TopbarProps> = ({
         <div className="items-center gap-1.5 px-3 py-1 rounded-lg bg-surface-base border border-surface-border text-xs font-mono hidden xl:flex">
           <Database className="h-3.5 w-3.5 text-slate-400" />
           <span className="text-slate-400">DB:</span>
-          <span className="text-emerald-400 font-semibold">SQLITE</span>
+          <span className="text-emerald-400 font-semibold">{(status?.integrations.database?.engine || 'DB').toUpperCase()}</span>
         </div>
 
         {/* Policy Guardrails Active Indicator (Desktop only) */}
