@@ -616,5 +616,32 @@ class RecoveryAIAgent:
                 "error_classification": "timeout/network = connectivity"
             }
 
+    def probe_models(self) -> dict:
+        """Safely probes candidate models against Google Generative Language API."""
+        import httpx
+        if not settings.GEMINI_API_KEY:
+            return {"configured": False, "error": "GEMINI_API_KEY is unset"}
+
+        results = {}
+        headers = {"x-goog-api-key": settings.GEMINI_API_KEY, "Content-Type": "application/json"}
+        payload = {
+            "contents": [{"parts": [{"text": "Reply JSON: {\"status\": \"ok\"}"}]}],
+            "generationConfig": {"responseMimeType": "application/json"}
+        }
+        for m in ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-2.5-flash", "gemini-3.8-flash"]:
+            url = f"https://generativelanguage.googleapis.com/v1beta/models/{m}:generateContent"
+            try:
+                with httpx.Client(timeout=10.0) as client:
+                    r = client.post(url, headers=headers, json=payload)
+                    err_msg = ""
+                    try:
+                        err_msg = r.json().get("error", {}).get("message", "")[:120]
+                    except Exception:
+                        pass
+                    results[m] = {"status_code": r.status_code, "error": err_msg}
+            except Exception as e:
+                results[m] = {"exception": str(e)}
+        return results
+
 ai_agent = RecoveryAIAgent()
 

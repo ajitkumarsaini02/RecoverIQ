@@ -42,3 +42,8 @@ def get_agent_diagnostics():
     """Returns safe diagnostic information on the AI integration without leaking secrets."""
     return ai_agent.get_diagnostics()
 
+@router.get("/agent/probe")
+def probe_agent_models():
+    """Probes candidate models against Google Generative Language API without leaking secrets."""
+    return ai_agent.probe_models()
+
