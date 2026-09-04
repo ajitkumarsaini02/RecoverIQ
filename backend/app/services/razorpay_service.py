@@ -135,7 +135,8 @@ class RazorpayService:
         Generates a real Razorpay Payment Link in Test Mode or returns simulated link.
         """
         amount_paise = int(round(amount_in_inr * 100))
-        phone = customer_phone or "+919876543210"
+        raw_phone = customer_phone or "+919876543210"
+        phone = "".join(c for c in raw_phone if c.isdigit() or c == "+")
         requested_mode = force_mode or self.current_mode_label
 
         if requested_mode == "TEST_MODE":

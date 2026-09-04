@@ -183,7 +183,7 @@ class RecoveryAIAgent:
 
         primary_model = settings.GEMINI_MODEL or "gemini-3.8-flash"
         candidate_models = [primary_model]
-        for fallback_cand in ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-2.5-flash", "gemini-3.8-pro", "gemini-3.0-pro", "gemini-3.0-flash"]:
+        for fallback_cand in ["gemini-3.7-flash", "gemini-3.5-flash", "gemini-3.6-flash"]:
             if fallback_cand not in candidate_models:
                 candidate_models.append(fallback_cand)
 
@@ -547,7 +547,11 @@ class RecoveryAIAgent:
             }
 
         model = settings.GEMINI_MODEL or "gemini-3.8-flash"
-        api_url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
+        candidate_models = [model]
+        for fallback_cand in ["gemini-3.7-flash", "gemini-3.5-flash", "gemini-3.6-flash"]:
+            if fallback_cand not in candidate_models:
+                candidate_models.append(fallback_cand)
+
         headers = {
             "x-goog-api-key": settings.GEMINI_API_KEY,
             "Content-Type": "application/json"
@@ -559,16 +563,22 @@ class RecoveryAIAgent:
 
         try:
             with httpx.Client(timeout=10.0) as client:
-                res = client.post(api_url, headers=headers, json=test_payload)
-                if res.status_code == 200:
-                    return {
-                        "status": "HEALTHY",
-                        "configured": True,
-                        "provider": settings.LLM_PROVIDER,
-                        "mode": "LIVE_LLM",
-                        "model": model,
-                        "error_classification": None
-                    }
+                res = None
+                for cand in candidate_models:
+                    api_url = f"https://generativelanguage.googleapis.com/v1beta/models/{cand}:generateContent"
+                    try:
+                        res = client.post(api_url, headers=headers, json=test_payload)
+                        if res.status_code == 200:
+                            return {
+                                "status": "HEALTHY",
+                                "configured": True,
+                                "provider": settings.LLM_PROVIDER,
+                                "mode": "LIVE_LLM",
+                                "model": model,
+                                "error_classification": None
+                            }
+                    except Exception:
+                        continue
 
                 err_msg = ""
                 try:

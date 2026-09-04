@@ -608,22 +608,25 @@ async def run_scenario(request: DemoScenarioRequest, db: Session = Depends(get_d
             db.add(aud_link)
 
     # Ensure complete consistency between transaction.retry_count, policy_res, and aud_policy
-    if txn.retry_count > 0:
-        for r in policy_res.rules_evaluated:
-            if r.rule_id == "RULE_MAX_RETRIES":
+    for r in policy_res.rules_evaluated:
+        if r.rule_id == "RULE_MAX_RETRIES":
+            if r.passed:
                 r.reason = f"Current retries ({txn.retry_count}) is within limit (2)."
-        policy_res.reasons = [
-            f"Current retries ({txn.retry_count}) is within limit (2)." if "Current retries (" in r else r
-            for r in policy_res.reasons
-        ]
-        aud_policy.details_json = json.dumps({
-            "action": policy_res.action,
-            "allowed": policy_res.allowed,
-            "requires_human_approval": policy_res.requires_human_approval,
-            "reasons": policy_res.reasons,
-            "rules_count": len(policy_res.rules_evaluated),
-            "retry_count": txn.retry_count
-        })
+            else:
+                r.reason = f"Exceeded maximum automated retry limit (2 allowed, {txn.retry_count} attempted). Action overridden to STOP."
+    policy_res.reasons = [
+        f"Current retries ({txn.retry_count}) is within limit (2)." if "Current retries (" in r
+        else (f"Exceeded maximum automated retry limit (2 allowed, {txn.retry_count} attempted). Action overridden to STOP." if "Exceeded maximum automated retry limit" in r else r)
+        for r in policy_res.reasons
+    ]
+    aud_policy.details_json = json.dumps({
+        "action": policy_res.action,
+        "allowed": policy_res.allowed,
+        "requires_human_approval": policy_res.requires_human_approval,
+        "reasons": policy_res.reasons,
+        "rules_count": len(policy_res.rules_evaluated),
+        "retry_count": txn.retry_count
+    })
 
     db.commit()
     db.refresh(txn)
