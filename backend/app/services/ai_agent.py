@@ -183,7 +183,7 @@ class RecoveryAIAgent:
 
         primary_model = settings.GEMINI_MODEL or "gemini-3.8-flash"
         candidate_models = [primary_model]
-        for fallback_cand in ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash", "gemini-3.8-pro", "gemini-3.0-pro", "gemini-3.0-flash"]:
+        for fallback_cand in ["gemini-2.0-flash", "gemini-1.5-flash", "gemini-2.5-flash", "gemini-3.8-pro", "gemini-3.0-pro", "gemini-3.0-flash"]:
             if fallback_cand not in candidate_models:
                 candidate_models.append(fallback_cand)
 
@@ -283,7 +283,7 @@ class RecoveryAIAgent:
                                 reason=str(parsed.get("reason", "AI assessed customer payment parameters.")),
                                 requires_human_approval=bool(parsed.get("requires_human_approval", False) or ctx.amount >= 20000.0),
                                 mode="LIVE_LLM",
-                                model_used=model,
+                                model_used=primary_model,
                                 fallback_used=False,
                                 fallback_reason=None
                             )

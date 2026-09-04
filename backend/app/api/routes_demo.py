@@ -150,7 +150,12 @@ async def run_scenario(request: DemoScenarioRequest, db: Session = Depends(get_d
     Supports explicit TEST_MODE (real Razorpay + Gemini) and SIMULATION_MODE.
     """
     raw_key = request.scenario or request.scenario_id or ""
-    scenario_key = raw_key.lower().replace(" ", "_")
+    scenario_key = raw_key.lower().replace(" ", "_").strip()
+    if scenario_key in ["high_value", "high_value_payment", "high_value_order"]:
+        scenario_key = "high_value_transaction"
+    if scenario_key in ["repeated_failures", "repeated_failure_cap", "retry_limit"]:
+        scenario_key = "repeated_failure"
+
     if scenario_key not in PRESET_SCENARIOS:
         raise HTTPException(
             status_code=400, 
@@ -509,7 +514,21 @@ async def run_scenario(request: DemoScenarioRequest, db: Session = Depends(get_d
                             mode="TEST_MODE",
                             created_at=now + timedelta(milliseconds=500)
                         )
-                        db.add(action_rec)
+                        aud_pending = AuditEvent(
+                            id=f"aud_{uuid.uuid4().hex[:12]}",
+                            timestamp=now + timedelta(milliseconds=700),
+                            transaction_id=txn.id,
+                            event_type="RECOVERY_ACTION_TRIGGERED",
+                            actor="RAZORPAY_GATEWAY",
+                            decision="TEST_ORDER_DISPATCHED",
+                            details_json=json.dumps({
+                                "order_id": order_id,
+                                "mode": "TEST_MODE",
+                                "action": policy_res.action,
+                                "retry_count": txn.retry_count
+                            })
+                        )
+                        db.add(aud_pending)
 
         elif policy_res.action == "PAYMENT_LINK":
             # Generate payment link via Razorpay
@@ -584,9 +603,27 @@ async def run_scenario(request: DemoScenarioRequest, db: Session = Depends(get_d
                 event_type="RECOVERY_ACTION_TRIGGERED",
                 actor="RAZORPAY_GATEWAY",
                 decision="PAYMENT_LINK_DISPATCHED",
-                details_json=json.dumps({"short_url": plink.get("short_url"), "mode": exec_mode})
+                details_json=json.dumps({"short_url": plink.get("short_url"), "mode": exec_mode, "retry_count": txn.retry_count})
             )
             db.add(aud_link)
+
+    # Ensure complete consistency between transaction.retry_count, policy_res, and aud_policy
+    if txn.retry_count > 0:
+        for r in policy_res.rules_evaluated:
+            if r.rule_id == "RULE_MAX_RETRIES":
+                r.reason = f"Current retries ({txn.retry_count}) is within limit (2)."
+        policy_res.reasons = [
+            f"Current retries ({txn.retry_count}) is within limit (2)." if "Current retries (" in r else r
+            for r in policy_res.reasons
+        ]
+        aud_policy.details_json = json.dumps({
+            "action": policy_res.action,
+            "allowed": policy_res.allowed,
+            "requires_human_approval": policy_res.requires_human_approval,
+            "reasons": policy_res.reasons,
+            "rules_count": len(policy_res.rules_evaluated),
+            "retry_count": txn.retry_count
+        })
 
     db.commit()
     db.refresh(txn)
