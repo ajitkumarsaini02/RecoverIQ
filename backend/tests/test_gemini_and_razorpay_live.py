@@ -16,9 +16,10 @@ from app.services.policy_engine import policy_engine
 
 client = TestClient(app)
 
-def post_signed_webhook(client_obj, payload, secret="whsec_dummy"):
+def post_signed_webhook(client_obj, payload, secret=None):
+    effective_secret = secret or settings.RAZORPAY_WEBHOOK_SECRET or "whsec_dummy"
     payload_bytes = json.dumps(payload).encode("utf-8")
-    sig = hmac.new(secret.encode("utf-8"), payload_bytes, hashlib.sha256).hexdigest()
+    sig = hmac.new(effective_secret.encode("utf-8"), payload_bytes, hashlib.sha256).hexdigest()
     return client_obj.post(
         "/api/webhook/razorpay",
         content=payload_bytes,
@@ -202,6 +203,7 @@ def test_razorpay_webhook_event_processing():
     assert res.json()["status"] == "success"
 
     # Refresh transaction from DB
+    db.expire_all()
     updated_txn = db.query(Transaction).filter(Transaction.id == "txn_wh_test_1").first()
     assert updated_txn.status == "RECOVERED"
     assert updated_txn.razorpay_payment_id == "pay_captured_99"
@@ -381,6 +383,7 @@ def test_duplicate_webhook_idempotency():
     assert res2.status_code == 200
 
     # Verify transaction remains RECOVERED without duplicate recovery actions
+    db.expire_all()
     updated_txn = db.query(Transaction).filter(Transaction.id == "txn_wh_idemp_1").first()
     assert updated_txn.status == "RECOVERED"
     db.close()

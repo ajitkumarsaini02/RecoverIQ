@@ -106,7 +106,8 @@ class RecoveryAIAgent:
     def analyze_failure(
         self, 
         transaction: Transaction, 
-        customer: Optional[Customer] = None
+        customer: Optional[Customer] = None,
+        force_heuristics: bool = False
     ) -> AIAgentRecommendation:
         """
         Analyze the failed payment context and output structured recovery recommendation.
@@ -142,6 +143,9 @@ class RecoveryAIAgent:
             previous_failed_payments=failed_cnt,
             previous_recovery_attempts=transaction.previous_recovery_attempts or retry_cnt
         )
+
+        if force_heuristics:
+            return self._run_expert_heuristics(context, fallback_reason="portfolio_batch_simulation")
 
         # Check if live LLM credentials are configured
         if settings.is_ai_configured:

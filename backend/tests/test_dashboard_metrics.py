@@ -89,8 +89,8 @@ def test_dashboard_recalculation_after_recovery():
     m1 = client.get("/api/dashboard").json()
     base_recovered = m1["revenue_recovered"]
 
-    # Execute recovery on the transaction
-    exec_res = client.post("/api/recovery/execute/txn_dash_calc_1")
+    # Execute recovery on the transaction in SIMULATION_MODE to test metric recalculation
+    exec_res = client.post("/api/recovery/execute/txn_dash_calc_1?mode=SIMULATION_MODE")
     assert exec_res.status_code == 200
     assert exec_res.json()["status"] == "SUCCESS"
 

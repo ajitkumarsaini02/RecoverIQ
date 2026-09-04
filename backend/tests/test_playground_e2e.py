@@ -15,8 +15,13 @@ def test_playground_all_6_scenarios_e2e():
     assert data1["ai_analysis"]["recommended_action"] == "RETRY_PAYMENT"
     assert data1["ai_analysis"]["recovery_probability"] >= 0.85
     assert data1["policy_decision"]["allowed"] is True
-    assert data1["recovery_result"]["status"] == "SUCCESS"
-    assert data1["recovery_result"]["recovered_amount"] == 4999.0
+    if data1["recovery_result"]["mode"] == "TEST_MODE":
+        assert data1["recovery_result"]["status"] == "PENDING"
+        assert data1["recovery_result"]["recovered_amount"] == 0.0
+        assert data1["recovery_result"]["razorpay_order_id"].startswith("order_")
+    else:
+        assert data1["recovery_result"]["status"] == "SUCCESS"
+        assert data1["recovery_result"]["recovered_amount"] == 4999.0
     assert len(data1["audit_timeline"]) >= 4
 
     # Scenario 2: Bank Decline
@@ -33,7 +38,12 @@ def test_playground_all_6_scenarios_e2e():
     data3 = res3.json()
     assert data3["scenario_id"] == "network_failure"
     assert data3["transaction"]["amount"] == 999.0
-    assert data3["recovery_result"]["recovered_amount"] == 999.0
+    if data3["recovery_result"]["mode"] == "TEST_MODE":
+        assert data3["recovery_result"]["status"] == "PENDING"
+        assert data3["recovery_result"]["recovered_amount"] == 0.0
+        assert data3["recovery_result"]["razorpay_order_id"].startswith("order_")
+    else:
+        assert data3["recovery_result"]["recovered_amount"] == 999.0
 
     # Scenario 4: Insufficient Funds
     res4 = client.post("/api/demo/scenario", json={"scenario_id": "insufficient_funds"})

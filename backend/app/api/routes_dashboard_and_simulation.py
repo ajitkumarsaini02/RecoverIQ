@@ -208,7 +208,7 @@ def run_batch_simulation(
     now = datetime.now(timezone.utc)
 
     for txn in candidates:
-        recommendation = ai_agent.analyze_failure(transaction=txn, customer=txn.customer)
+        recommendation = ai_agent.analyze_failure(transaction=txn, customer=txn.customer, force_heuristics=True)
         policy_res = policy_engine.evaluate(transaction=txn, recommendation=recommendation)
 
         if not policy_res.allowed or policy_res.action == "STOP":

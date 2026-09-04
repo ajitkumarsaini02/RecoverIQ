@@ -66,7 +66,7 @@ export interface RecoveryExecutionResult {
   execution_id: string;
   transaction_id: string;
   action_type: RecoveryActionType;
-  status: 'SUCCESS' | 'FAILED' | 'PENDING_APPROVAL' | 'REJECTED' | 'SKIPPED';
+  status: 'SUCCESS' | 'PENDING' | 'PENDING_APPROVAL' | 'STOPPED' | 'FAILED' | 'REJECTED' | 'SKIPPED' | 'REQUIRES_APPROVAL';
   recovered_amount: number;
   razorpay_order_id?: string;
   razorpay_payment_link?: string;

@@ -44,7 +44,7 @@ def test_complete_human_approval_workflow():
     client = TestClient(app)
 
     # 1. Execute recovery (Should be gated for approval because amount >= ₹20,000)
-    exec_res = client.post("/api/recovery/execute/txn_appr_high_val")
+    exec_res = client.post("/api/recovery/execute/txn_appr_high_val?mode=SIMULATION_MODE")
     assert exec_res.status_code == 200
     exec_data = exec_res.json()
     assert exec_data["status"] == "REQUIRES_APPROVAL"

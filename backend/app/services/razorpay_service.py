@@ -20,9 +20,45 @@ class RazorpayService:
     BASE_URL = "https://api.razorpay.com/v1"
 
     def __init__(self, key_id: Optional[str] = None, key_secret: Optional[str] = None, webhook_secret: Optional[str] = None):
-        self.key_id = key_id or settings.RAZORPAY_KEY_ID
-        self.key_secret = key_secret or settings.RAZORPAY_KEY_SECRET
-        self.webhook_secret = webhook_secret or settings.RAZORPAY_WEBHOOK_SECRET
+        self._custom_key_id = key_id
+        self._custom_key_secret = key_secret
+        self._custom_webhook_secret = webhook_secret
+
+    @property
+    def key_id(self) -> str:
+        return self._custom_key_id if self._custom_key_id is not None else (settings.RAZORPAY_KEY_ID or "")
+
+    @key_id.setter
+    def key_id(self, val: str) -> None:
+        self._custom_key_id = val
+
+    @key_id.deleter
+    def key_id(self) -> None:
+        self._custom_key_id = None
+
+    @property
+    def key_secret(self) -> str:
+        return self._custom_key_secret if self._custom_key_secret is not None else (settings.RAZORPAY_KEY_SECRET or "")
+
+    @key_secret.setter
+    def key_secret(self, val: str) -> None:
+        self._custom_key_secret = val
+
+    @key_secret.deleter
+    def key_secret(self) -> None:
+        self._custom_key_secret = None
+
+    @property
+    def webhook_secret(self) -> str:
+        return self._custom_webhook_secret if self._custom_webhook_secret is not None else (settings.RAZORPAY_WEBHOOK_SECRET or "")
+
+    @webhook_secret.setter
+    def webhook_secret(self, val: str) -> None:
+        self._custom_webhook_secret = val
+
+    @webhook_secret.deleter
+    def webhook_secret(self) -> None:
+        self._custom_webhook_secret = None
 
     @property
     def is_configured(self) -> bool:

@@ -98,7 +98,7 @@ def test_policy_engine_max_retries_and_high_value_gate():
 
 def test_api_demo_scenario_endpoint():
     client = TestClient(app)
-    response = client.post("/api/demo/scenario", json={"scenario": "temporary_upi_failure"})
+    response = client.post("/api/demo/scenario", json={"scenario": "temporary_upi_failure", "mode": "SIMULATION_MODE"})
     assert response.status_code == 200
     data = response.json()
     assert data["scenario_id"] == "temporary_upi_failure"
@@ -111,8 +111,8 @@ def test_api_demo_scenario_endpoint():
 
 def test_api_demo_high_value_approval_flow():
     client = TestClient(app)
-    # 1. Run high-value scenario
-    response = client.post("/api/demo/scenario", json={"scenario": "high_value_transaction"})
+    # 1. Run high-value scenario in SIMULATION_MODE
+    response = client.post("/api/demo/scenario", json={"scenario": "high_value_transaction", "mode": "SIMULATION_MODE"})
     assert response.status_code == 200
     data = response.json()
     assert data["policy_decision"]["requires_human_approval"] is True
@@ -133,7 +133,7 @@ def test_api_demo_high_value_approval_flow():
 def test_api_dashboard_and_simulation():
     client = TestClient(app)
     # Run a scenario first so we have data
-    client.post("/api/demo/scenario", json={"scenario": "temporary_upi_failure"})
+    client.post("/api/demo/scenario", json={"scenario": "temporary_upi_failure", "mode": "SIMULATION_MODE"})
     
     # Check dashboard metrics
     metrics_res = client.get("/api/dashboard")

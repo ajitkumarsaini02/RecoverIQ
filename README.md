@@ -8,7 +8,7 @@
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.6+-3178C6.svg?style=flat&logo=typescript&logoColor=white)](https://www.typescriptlang.org)
 [![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-3.4+-38B2AC.svg?style=flat&logo=tailwind-css&logoColor=white)](https://tailwindcss.com)
 [![Razorpay](https://img.shields.io/badge/Razorpay-Test_Mode-0C2340.svg?style=flat&logo=razorpay&logoColor=528FF0)](https://razorpay.com)
-[![Tests](https://img.shields.io/badge/Tests-48%2F48%20Passed-10b981.svg?style=flat&logo=pytest&logoColor=white)](https://pytest.org)
+[![Tests](https://img.shields.io/badge/Tests-91%2F91%20Passed-10b981.svg?style=flat&logo=pytest&logoColor=white)](https://pytest.org)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg?style=flat)](LICENSE)
 
 **Razorpay Buildathon Track 3: AI Revenue Recovery**
@@ -120,23 +120,27 @@ The AI agent strictly *recommends*, but the **Policy Engine** has final binding 
 - Automatically activates **SIMULATION MODE** when credentials are unset, ensuring 100% uptime for demos.
 - **Strict Security**: Secrets are **never exposed to the frontend** and **real money is never used**.
 
-### 3. Explainable AI Reasoning Layer
-- Structured Pydantic v2 validation schema (`AIAgentRecommendation`).
-- Analyzes customer lifetime value, historical success rates, and retry counts.
-- Built-in heuristic domain fallback guaranteeing 100% uptime even if external LLM APIs fail.
+### 3. Explainable AI Reasoning Layer (Gemini 3.8 Flash)
+- Powered by `gemini-3.8-flash` using structured JSON output validated against Pydantic schemas.
+- Evidence-grounded root-cause diagnosis without unsupported issuer claims.
+- Fallback to calibrated domain heuristics occurs only when external LLM APIs are unreachable, with transparent `fallback_used` audit logging.
+
+### 4. No Fake Recovery & Strict Razorpay Test Mode
+- **Zero Real Money**: Operates strictly in Razorpay TEST MODE or Simulation Sandbox.
+- **No Fake Recovery**: Creating a Razorpay Test Order or Payment Link does **not** count as recovered revenue. Status remains `PENDING` with `recovered_amount = 0` until actual customer payment confirmation/verification (via verified webhook or payment capture).
 
 ---
 
 ## 🎮 5. 6 Recovery Playground Scenarios
 
-| Scenario | Amount | Failure Reason | Customer Context | Action | Outcome |
-| :--- | :--- | :--- | :--- | :--- | :--- |
-| **1. Temporary UPI Failure** *(Flagship)* | **₹4,999** | `UPI_TIMEOUT` | 8 success / 1 fail (₹39,992 LTV) | `RETRY_PAYMENT` | **₹4,999 Recovered** (91% Prob) |
-| **2. Bank Decline** | **₹2,499** | `BANK_DECLINED` | 6 success / 2 fail (₹14,994 LTV) | `ALTERNATIVE_PAYMENT_METHOD` | Smart Payment Link Sent |
-| **3. Gateway Network Drop** | **₹999** | `NETWORK_ERROR` | 3 success / 0 fail (₹2,997 LTV) | `RETRY_PAYMENT` | **₹999 Recovered** (88% Prob) |
-| **4. Insufficient Funds** | **₹14,999** | `INSUFFICIENT_FUNDS` | 4 success / 1 fail (₹59,996 LTV) | `PAYMENT_LINK` | Scheduled Link Dispatched |
-| **5. Repeated Failure Cap** | **₹4,999** | `BANK_DECLINED` | 2 prior failed retries | `STOP` | **Policy Halted** (2-Retry Limit) |
-| **6. High-Value Payment** | **₹49,999** | `BANK_DECLINED` | Enterprise client | `HUMAN_ESCALATION` | **Gated for Approval Queue** |
+| Scenario | Amount | Failure Reason | AI Action | Policy Decision | Recovery Status | Outcome |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| **1. Temporary UPI Failure** | **₹4,999** | `UPI_TIMEOUT` | `RETRY_PAYMENT` | `APPROVED` | `PENDING` | Test Order Created (Pending Checkout) |
+| **2. Bank Decline** | **₹2,499** | `BANK_DECLINED` | `ALTERNATIVE_PAYMENT_METHOD` | `APPROVED` | `PENDING` | Smart Payment Link Dispatched |
+| **3. Gateway Network Drop** | **₹999** | `NETWORK_ERROR` | `RETRY_PAYMENT` | `APPROVED` | `PENDING` | Test Order Created (Pending Checkout) |
+| **4. Insufficient Funds** | **₹14,999** | `INSUFFICIENT_FUNDS` | `PAYMENT_LINK` | `APPROVED` | `PENDING` | Payment Link Generated |
+| **5. Repeated Failure Cap** | **₹4,999** | `BANK_DECLINED` | `STOP` | `REJECTED/STOPPED` | `STOPPED` | Policy Halted (2-Retry Ceiling) |
+| **6. High-Value Payment** | **₹49,999** | `BANK_DECLINED` | `ALTERNATIVE_PAYMENT_METHOD` | `HUMAN_APPROVAL_REQUIRED` | `PENDING_APPROVAL` | Gated for Approval Queue |
 
 ---
 
@@ -221,14 +225,14 @@ npm run dev
 
 ---
 
-## 🧪 10. Automated Tests (48/48 Passing)
+## 🧪 10. Automated Tests (91/91 Passing)
 
 Run the complete backend test suite:
 ```bash
 cd backend
 ../venv/Scripts/python -m pytest -v tests
 ```
-*All 48 unit, integration, policy guardrail, simulation, and scenario tests execute in < 2s.*
+*All 91 unit, integration, policy guardrail, simulation, idempotency, webhook, and scenario tests execute cleanly.*
 
 ---
 

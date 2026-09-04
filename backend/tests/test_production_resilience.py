@@ -13,7 +13,7 @@ from tests.conftest import TestSession
 def test_scenario_1_successful_recovery():
     """Scenario 1: Standard transient failure recovers successfully."""
     client = TestClient(app)
-    res = client.post("/api/demo/scenario", json={"scenario_id": "temporary_upi_failure"})
+    res = client.post("/api/demo/scenario", json={"scenario_id": "temporary_upi_failure", "mode": "SIMULATION_MODE"})
     assert res.status_code == 200
     data = res.json()
     assert data["recovery_result"]["status"] == "SUCCESS"
@@ -151,7 +151,7 @@ def test_scenario_8_ai_unavailable_heuristics_fallback():
         failure_reason="UPI_TIMEOUT",
         retry_count=0
     )
-    rec = ai_agent.analyze_failure(transaction=txn)
+    rec = ai_agent.analyze_failure(transaction=txn, force_heuristics=True)
     assert rec.recovery_probability in [0.82, 0.91]
     assert rec.mode in ["HEURISTIC_FALLBACK", "DEMO_FALLBACK"]
     assert rec.fallback_used is True

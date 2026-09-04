@@ -35,7 +35,7 @@ const PRESET_SCENARIOS: PresetScenarioCard[] = [
     amount: 4999,
     method: 'UPI',
     reason: 'UPI_TIMEOUT',
-    expectedOutcome: 'AI: 91% Prob -> Auto-Retry -> ₹4,999 Recovered',
+    expectedOutcome: 'AI: 91% Prob -> Auto-Retry -> Order Created (Pending Checkout)',
     badge: 'UPI LATENCY',
     badgeColor: 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
   },
@@ -57,7 +57,7 @@ const PRESET_SCENARIOS: PresetScenarioCard[] = [
     amount: 999,
     method: 'UPI',
     reason: 'NETWORK_ERROR',
-    expectedOutcome: 'AI: 88% Prob -> Immediate Safe Retry -> Recovered',
+    expectedOutcome: 'AI: 88% Prob -> Safe Retry -> Order Created (Pending Checkout)',
     badge: 'GATEWAY TIMEOUT',
     badgeColor: 'bg-purple-500/20 text-purple-300 border-purple-500/40'
   },
@@ -369,6 +369,8 @@ export const RecoveryPlayground: React.FC = () => {
             <div className={`p-5 rounded-xl border flex flex-col md:flex-row md:items-center justify-between gap-4 ${
               result.recovery_result.status === 'SUCCESS'
                 ? 'bg-emerald-950/30 border-emerald-800/60'
+                : result.recovery_result.status === 'PENDING'
+                ? 'bg-blue-950/30 border-blue-800/60'
                 : result.recovery_result.status === 'PENDING_APPROVAL'
                 ? 'bg-amber-950/30 border-amber-800/60'
                 : 'bg-slate-900/60 border-slate-700'
@@ -377,12 +379,16 @@ export const RecoveryPlayground: React.FC = () => {
                 <div className={`h-11 w-11 rounded-xl flex items-center justify-center shrink-0 ${
                   result.recovery_result.status === 'SUCCESS'
                     ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                    : result.recovery_result.status === 'PENDING'
+                    ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30'
                     : result.recovery_result.status === 'PENDING_APPROVAL'
                     ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
                     : 'bg-slate-800 text-slate-400 border border-slate-700'
                 }`}>
                   {result.recovery_result.status === 'SUCCESS' ? (
                     <CheckCircle2 className="h-6 w-6" />
+                  ) : result.recovery_result.status === 'PENDING' ? (
+                    <Clock className="h-6 w-6" />
                   ) : result.recovery_result.status === 'PENDING_APPROVAL' ? (
                     <UserCheck className="h-6 w-6" />
                   ) : (
@@ -398,6 +404,8 @@ export const RecoveryPlayground: React.FC = () => {
                     <span className={`text-xs font-mono font-bold px-2.5 py-0.5 rounded-full border ${
                       result.recovery_result.status === 'SUCCESS'
                         ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/40'
+                        : result.recovery_result.status === 'PENDING'
+                        ? 'bg-blue-500/20 text-blue-300 border-blue-500/40'
                         : result.recovery_result.status === 'PENDING_APPROVAL'
                         ? 'bg-amber-500/20 text-amber-300 border-amber-500/40'
                         : 'bg-slate-800 text-slate-300 border-slate-700'
@@ -411,9 +419,13 @@ export const RecoveryPlayground: React.FC = () => {
                     }`}>
                       {result.mode === 'TEST_MODE' ? 'Razorpay Test Mode' : 'SIMULATED RECOVERY'}
                     </span>
-                    {result.ai_analysis.model_used && (
-                      <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-blue-500/10 text-blue-300 border border-blue-500/30">
-                        {result.ai_analysis.model_used}
+                    {result.ai_analysis.fallback_used ? (
+                      <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-amber-500/10 text-amber-300 border border-amber-500/30 font-semibold">
+                        HEURISTIC_FALLBACK
+                      </span>
+                    ) : (
+                      <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-purple-500/10 text-purple-300 border border-purple-500/30 font-semibold">
+                        LIVE_LLM ({result.ai_analysis.model_used || 'gemini-3.8-flash'})
                       </span>
                     )}
                   </div>
